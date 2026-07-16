@@ -1,5 +1,9 @@
 # Repo RAG
 
+<p align="center">
+  <img src="assets/logo.svg" alt="Repo RAG logo" width="720">
+</p>
+
 Repo RAG is a Phase 1 retrieval-augmented generation MVP for GitHub repositories.
 
 It can:
@@ -78,3 +82,12 @@ Endpoints:
 
 The default embedding provider is deterministic and local. It is useful for development and tests because it requires no API keys or network access. For production-quality retrieval, add a provider backed by a real embedding model while keeping the same `EmbeddingProvider` interface.
 
+## Credits
+
+<p align="center">
+  <img src="assets/codex-color.svg" alt="Codex logo" width="42">
+  &nbsp;&nbsp;
+  <img src="assets/deepseek-color.svg" alt="DeepSeek logo" width="42">
+</p>
+
+Built with help from Codex and DeepSeek.
