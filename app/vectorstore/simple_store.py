@@ -33,6 +33,12 @@ class SimpleJsonVectorStore(VectorStore):
             scored.append((chunk, score))
         return sorted(scored, key=lambda item: item[1], reverse=True)[:top_k]
 
+    def all_chunks(self) -> list[Chunk]:
+        return [
+            Chunk(id=record["id"], content=record["content"], metadata=record["metadata"])
+            for record in self._load_records()
+        ]
+
     def _load_records(self) -> list[dict]:
         if not self.path.exists():
             return []
@@ -46,4 +52,3 @@ def _cosine_similarity(left: list[float], right: list[float]) -> float:
     if left_norm == 0 or right_norm == 0:
         return 0.0
     return dot / (left_norm * right_norm)
-

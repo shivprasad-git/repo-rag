@@ -14,3 +14,6 @@ class VectorStore(ABC):
     def search(self, query_embedding: list[float], top_k: int = 5) -> list[tuple[Chunk, float]]:
         raise NotImplementedError
 
+    @abstractmethod
+    def all_chunks(self) -> list[Chunk]:
+        raise NotImplementedError

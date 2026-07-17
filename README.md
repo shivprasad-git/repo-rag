@@ -15,7 +15,7 @@ It can:
 - Create chunk objects with file, symbol, line, language, repo, and commit metadata.
 - Generate embeddings through a pluggable interface.
 - Store embeddings, content, and metadata in Chroma or a local JSON vector store.
-- Retrieve top-k chunks for a user question.
+- Retrieve top-k chunks for a user question with hybrid vector + keyword search.
 - Build an LLM-ready prompt from retrieved repository context.
 
 ## Setup

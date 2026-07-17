@@ -41,3 +41,12 @@ class ChromaVectorStore(VectorStore):
 
         return matches
 
+    def all_chunks(self) -> list[Chunk]:
+        result = self.collection.get(include=["documents", "metadatas"])
+        ids = result.get("ids", [])
+        documents = result.get("documents", [])
+        metadatas = result.get("metadatas", [])
+        return [
+            Chunk(id=chunk_id, content=content, metadata=dict(metadata))
+            for chunk_id, content, metadata in zip(ids, documents, metadatas)
+        ]
