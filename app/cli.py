@@ -5,6 +5,7 @@ import argparse
 from app.config import Settings
 from app.llm import build_prompt
 from app.pipeline import ask_repository, index_repository, query_repository
+from app.retrieval.filters import MetadataFilters
 
 
 def main() -> None:
@@ -20,11 +21,13 @@ def main() -> None:
     query_parser.add_argument("--question", required=True)
     query_parser.add_argument("--top-k", type=int, default=5)
     query_parser.add_argument("--prompt", action="store_true", help="Print an LLM prompt instead of raw matches")
+    _add_filter_args(query_parser)
 
     ask_parser = subparsers.add_parser("ask", help="Index a repository and print an LLM-ready prompt")
     ask_parser.add_argument("--repo", required=True)
     ask_parser.add_argument("--question", required=True)
     ask_parser.add_argument("--top-k", type=int, default=5)
+    _add_filter_args(ask_parser)
 
     args = parser.parse_args()
     settings = Settings()
@@ -33,13 +36,45 @@ def main() -> None:
         repo_path, chunk_count = index_repository(args.repo, args.store, settings, args.index_name)
         print(f"Indexed {chunk_count} chunks from {repo_path}")
     elif args.command == "query":
-        matches = query_repository(args.question, args.store, settings, args.top_k, args.index_name)
+        matches = query_repository(
+            args.question,
+            args.store,
+            settings,
+            args.top_k,
+            args.index_name,
+            filters=_metadata_filters_from_args(args),
+        )
         if args.prompt:
             print(build_prompt(args.question, matches))
         else:
             _print_matches(matches)
     elif args.command == "ask":
-        print(ask_repository(args.repo, args.question, args.store, settings, args.top_k, args.index_name))
+        print(
+            ask_repository(
+                args.repo,
+                args.question,
+                args.store,
+                settings,
+                args.top_k,
+                args.index_name,
+                filters=_metadata_filters_from_args(args),
+            )
+        )
+
+
+def _add_filter_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--language", help="Only retrieve chunks for this language, e.g. python or markdown")
+    parser.add_argument("--chunk-type", help="Only retrieve this chunk type, e.g. function, method, class")
+    parser.add_argument("--path", dest="path_prefix", help="Only retrieve chunks whose file path starts with this value")
+
+
+def _metadata_filters_from_args(args: argparse.Namespace) -> MetadataFilters | None:
+    filters = MetadataFilters(
+        language=args.language,
+        chunk_type=args.chunk_type,
+        path_prefix=args.path_prefix,
+    )
+    return filters if filters.has_filters else None
 
 
 def _print_matches(matches) -> None:
@@ -51,4 +86,3 @@ def _print_matches(matches) -> None:
 
 if __name__ == "__main__":
     main()
-

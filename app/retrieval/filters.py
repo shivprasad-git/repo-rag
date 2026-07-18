@@ -1,0 +1,35 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from app.models import Chunk
+
+
+@dataclass(frozen=True)
+class MetadataFilters:
+    language: str | None = None
+    chunk_type: str | None = None
+    path_prefix: str | None = None
+
+    @property
+    def has_filters(self) -> bool:
+        return bool(self.language or self.chunk_type or self.path_prefix)
+
+    def matches(self, chunk: Chunk) -> bool:
+        metadata = chunk.metadata
+        if self.language and metadata.get("language") != self.language:
+            return False
+        if self.chunk_type and metadata.get("chunk_type") != self.chunk_type:
+            return False
+        if self.path_prefix:
+            file_path = str(metadata.get("file_path", ""))
+            normalized_prefix = self.path_prefix.strip("/")
+            if not file_path.startswith(normalized_prefix):
+                return False
+        return True
+
+
+def filter_chunks(chunks: list[Chunk], filters: MetadataFilters | None) -> list[Chunk]:
+    if filters is None or not filters.has_filters:
+        return chunks
+    return [chunk for chunk in chunks if filters.matches(chunk)]

@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from app.config import Settings
 from app.pipeline import index_repository, query_repository
+from app.retrieval.filters import MetadataFilters
 
 
 app = FastAPI(title="Repo RAG Phase 1")
@@ -22,6 +23,9 @@ class QueryRequest(BaseModel):
     store: str = "chroma"
     index_name: str | None = None
     top_k: int = 5
+    language: str | None = None
+    chunk_type: str | None = None
+    path_prefix: str | None = None
 
 
 @app.post("/index")
@@ -32,11 +36,22 @@ def index(request: IndexRequest) -> dict:
 
 @app.post("/query")
 def query(request: QueryRequest) -> dict:
-    matches = query_repository(request.question, request.store, settings, request.top_k, request.index_name)
+    filters = MetadataFilters(
+        language=request.language,
+        chunk_type=request.chunk_type,
+        path_prefix=request.path_prefix,
+    )
+    matches = query_repository(
+        request.question,
+        request.store,
+        settings,
+        request.top_k,
+        request.index_name,
+        filters=filters if filters.has_filters else None,
+    )
     return {
         "matches": [
             {"score": score, "content": chunk.content, "metadata": chunk.metadata}
             for chunk, score in matches
         ]
     }
-

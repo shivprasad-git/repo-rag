@@ -7,6 +7,7 @@ from app.embeddings import HashEmbeddingProvider
 from app.ingest.chunker import create_chunks
 from app.ingest.repository import load_repository
 from app.llm import build_prompt
+from app.retrieval.filters import MetadataFilters
 from app.retrieval import Retriever
 from app.vectorstore import build_vector_store
 
@@ -33,10 +34,11 @@ def query_repository(
     settings: Settings,
     top_k: int,
     index_name: str | None = None,
+    filters: MetadataFilters | None = None,
 ):
     embedder = build_embedder(settings)
     vector_store = build_vector_store(store_kind, settings, index_name=index_name)
-    return Retriever(embedder, vector_store).retrieve(question, top_k=top_k)
+    return Retriever(embedder, vector_store).retrieve(question, top_k=top_k, filters=filters)
 
 
 def ask_repository(
@@ -46,8 +48,8 @@ def ask_repository(
     settings: Settings,
     top_k: int,
     index_name: str | None = None,
+    filters: MetadataFilters | None = None,
 ) -> str:
     index_repository(repo, store_kind, settings, index_name=index_name)
-    matches = query_repository(question, store_kind, settings, top_k, index_name=index_name)
+    matches = query_repository(question, store_kind, settings, top_k, index_name=index_name, filters=filters)
     return build_prompt(question, matches)
-

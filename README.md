@@ -48,6 +48,16 @@ python3 -m app.cli --store simple --index-name flask query \
   --top-k 5
 ```
 
+Narrow retrieval with metadata filters:
+
+```bash
+python3 -m app.cli --store simple --index-name flask query \
+  --question "Where is login implemented?" \
+  --language python \
+  --chunk-type method \
+  --path app
+```
+
 Print an LLM-ready prompt instead of raw matches:
 
 ```bash

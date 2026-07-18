@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.embeddings import EmbeddingProvider
 from app.models import Chunk
+from app.retrieval.filters import MetadataFilters
 from app.retrieval.keyword import BM25KeywordIndex
 from app.vectorstore.base import VectorStore
 
@@ -19,14 +20,27 @@ class Retriever:
         self.vector_weight = vector_weight
         self.keyword_weight = keyword_weight
 
-    def retrieve(self, question: str, top_k: int = 5) -> list[tuple[Chunk, float]]:
-        return self.retrieve_hybrid(question, top_k=top_k)
+    def retrieve(
+        self,
+        question: str,
+        top_k: int = 5,
+        filters: MetadataFilters | None = None,
+    ) -> list[tuple[Chunk, float]]:
+        return self.retrieve_hybrid(question, top_k=top_k, filters=filters)
 
-    def retrieve_hybrid(self, question: str, top_k: int = 5) -> list[tuple[Chunk, float]]:
+    def retrieve_hybrid(
+        self,
+        question: str,
+        top_k: int = 5,
+        filters: MetadataFilters | None = None,
+    ) -> list[tuple[Chunk, float]]:
         query_embedding = self.embedder.embed(question)
         candidate_count = max(top_k * 4, 20)
-        vector_matches = self.vector_store.search(query_embedding, top_k=candidate_count)
-        keyword_matches = BM25KeywordIndex(self.vector_store.all_chunks()).search(question, top_k=candidate_count)
+        vector_matches = self.vector_store.search(query_embedding, top_k=candidate_count, filters=filters)
+        keyword_matches = BM25KeywordIndex(self.vector_store.all_chunks(filters=filters)).search(
+            question,
+            top_k=candidate_count,
+        )
 
         merged: dict[str, tuple[Chunk, float]] = {}
         for chunk, score in _normalize(vector_matches):

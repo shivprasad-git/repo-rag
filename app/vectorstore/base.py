@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from app.models import Chunk
+from app.retrieval.filters import MetadataFilters
 
 
 class VectorStore(ABC):
@@ -11,9 +12,14 @@ class VectorStore(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def search(self, query_embedding: list[float], top_k: int = 5) -> list[tuple[Chunk, float]]:
+    def search(
+        self,
+        query_embedding: list[float],
+        top_k: int = 5,
+        filters: MetadataFilters | None = None,
+    ) -> list[tuple[Chunk, float]]:
         raise NotImplementedError
 
     @abstractmethod
-    def all_chunks(self) -> list[Chunk]:
+    def all_chunks(self, filters: MetadataFilters | None = None) -> list[Chunk]:
         raise NotImplementedError

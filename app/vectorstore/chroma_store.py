@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.models import Chunk
+from app.retrieval.filters import MetadataFilters, filter_chunks
 from app.vectorstore.base import VectorStore
 
 
@@ -27,8 +28,18 @@ class ChromaVectorStore(VectorStore):
             metadatas=[chunk.metadata for chunk in chunks],
         )
 
-    def search(self, query_embedding: list[float], top_k: int = 5) -> list[tuple[Chunk, float]]:
-        result = self.collection.query(query_embeddings=[query_embedding], n_results=top_k)
+    def search(
+        self,
+        query_embedding: list[float],
+        top_k: int = 5,
+        filters: MetadataFilters | None = None,
+    ) -> list[tuple[Chunk, float]]:
+        where = _chroma_where(filters)
+        requested_results = top_k if where else max(top_k * 4, top_k)
+        query_args = {"query_embeddings": [query_embedding], "n_results": requested_results}
+        if where:
+            query_args["where"] = where
+        result = self.collection.query(**query_args)
         ids = result.get("ids", [[]])[0]
         documents = result.get("documents", [[]])[0]
         metadatas = result.get("metadatas", [[]])[0]
@@ -39,14 +50,38 @@ class ChromaVectorStore(VectorStore):
             score = 1.0 / (1.0 + float(distance))
             matches.append((Chunk(id=chunk_id, content=content, metadata=dict(metadata)), score))
 
-        return matches
+        if filters is None or not filters.path_prefix:
+            return matches[:top_k]
+        return [(chunk, score) for chunk, score in matches if filters.matches(chunk)][:top_k]
 
-    def all_chunks(self) -> list[Chunk]:
-        result = self.collection.get(include=["documents", "metadatas"])
+    def all_chunks(self, filters: MetadataFilters | None = None) -> list[Chunk]:
+        get_args = {"include": ["documents", "metadatas"]}
+        where = _chroma_where(filters)
+        if where:
+            get_args["where"] = where
+        result = self.collection.get(**get_args)
         ids = result.get("ids", [])
         documents = result.get("documents", [])
         metadatas = result.get("metadatas", [])
-        return [
+        chunks = [
             Chunk(id=chunk_id, content=content, metadata=dict(metadata))
             for chunk_id, content, metadata in zip(ids, documents, metadatas)
         ]
+        return filter_chunks(chunks, filters)
+
+
+def _chroma_where(filters: MetadataFilters | None) -> dict | None:
+    if filters is None:
+        return None
+
+    clauses = []
+    if filters.language:
+        clauses.append({"language": filters.language})
+    if filters.chunk_type:
+        clauses.append({"chunk_type": filters.chunk_type})
+
+    if not clauses:
+        return None
+    if len(clauses) == 1:
+        return clauses[0]
+    return {"$and": clauses}
