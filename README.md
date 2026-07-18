@@ -10,7 +10,7 @@ It can:
 
 - Clone a GitHub repository or load a local repo.
 - Discover `.py`, `.md`, and `.txt` files.
-- Parse Python with `ast`.
+- Parse Python and Markdown with Tree-sitter.
 - Split Markdown by headings.
 - Create chunk objects with file, symbol, line, language, repo, and commit metadata.
 - Generate embeddings through a pluggable interface.

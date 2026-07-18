@@ -1,10 +1,17 @@
 from __future__ import annotations
 
-import ast
 import hashlib
 from pathlib import Path
 
+from tree_sitter import Language, Node, Parser, Tree
+import tree_sitter_markdown
+import tree_sitter_python
+
 from app.models import Chunk
+
+
+PYTHON_LANGUAGE = Language(tree_sitter_python.language())
+MARKDOWN_LANGUAGE = Language(tree_sitter_markdown.language())
 
 
 def parse_file(path: Path, repo_path: Path, commit: str | None = None) -> list[Chunk]:
@@ -19,63 +26,42 @@ def parse_file(path: Path, repo_path: Path, commit: str | None = None) -> list[C
 
 
 def parse_python(path: Path, repo_path: Path, commit: str | None = None) -> list[Chunk]:
-    source = path.read_text(encoding="utf-8", errors="ignore")
-    lines = source.splitlines()
-    base_metadata = _base_metadata(path, repo_path, "python", commit)
-
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        return [_whole_file_chunk(source, base_metadata, "python_file")]
+    source = path.read_bytes()
+    lines = _decode(source).splitlines()
+    metadata = _base_metadata(path, repo_path, "python", commit)
+    tree = _parse(source, PYTHON_LANGUAGE)
+    root = tree.root_node
 
     chunks: list[Chunk] = []
-    imports = _collect_imports(tree)
+    imports = _top_level_nodes(root, {"import_statement", "import_from_statement"})
     if imports:
-        chunks.append(
-            Chunk(
-                id=_chunk_id(base_metadata, "imports", "imports", 1, max(1, len(imports))),
-                content="\n".join(imports),
-                metadata=base_metadata
-                | {
-                    "chunk_type": "imports",
-                    "symbol": "imports",
-                    "start_line": 1,
-                    "end_line": max(1, len(imports)),
-                },
-            )
-        )
+        chunks.append(_import_chunk(source, imports, metadata))
 
-    for node in ast.iter_child_nodes(tree):
-        if isinstance(node, ast.ClassDef):
-            chunks.extend(_class_chunks(node, lines, base_metadata))
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            chunks.append(_node_chunk(node, lines, base_metadata, "function", node.name))
-
-    if not chunks:
-        chunks.append(_whole_file_chunk(source, base_metadata, "python_file"))
+    for node in root.children:
+        if node.type == "class_definition":
+            chunks.extend(_class_chunks(source, lines, node, metadata))
+        elif node.type == "function_definition":
+            name = _node_name(source, node)
+            chunks.append(_node_chunk(source, lines, node, metadata, "function", name))
 
     return chunks
 
 
 def parse_markdown(path: Path, repo_path: Path, commit: str | None = None) -> list[Chunk]:
-    text = path.read_text(encoding="utf-8", errors="ignore")
-    lines = text.splitlines()
+    source = path.read_bytes()
+    tree = _parse(source, MARKDOWN_LANGUAGE)
     metadata = _base_metadata(path, repo_path, "markdown", commit)
+    lines = _decode(source).splitlines()
+    heading_lines = _markdown_heading_lines(tree)
+
+    if not heading_lines and lines:
+        return [_line_chunk(lines, 0, len(lines) - 1, metadata, "markdown_section", "Document")]
+
     chunks: list[Chunk] = []
-    section_start = 0
-    section_title = "Document"
-
-    for index, line in enumerate(lines):
-        if line.startswith("#") and line.lstrip("#").startswith(" "):
-            if index > section_start:
-                chunks.append(
-                    _line_chunk(lines, section_start, index - 1, metadata, "markdown_section", section_title)
-                )
-            section_start = index
-            section_title = line.lstrip("#").strip() or "Section"
-
-    if lines:
-        chunks.append(_line_chunk(lines, section_start, len(lines) - 1, metadata, "markdown_section", section_title))
+    for index, start in enumerate(heading_lines):
+        end = heading_lines[index + 1] - 1 if index + 1 < len(heading_lines) else len(lines) - 1
+        title = lines[start].lstrip("#").strip() or "Section"
+        chunks.append(_line_chunk(lines, start, end, metadata, "markdown_section", title))
 
     return [chunk for chunk in chunks if chunk.content.strip()]
 
@@ -83,37 +69,89 @@ def parse_markdown(path: Path, repo_path: Path, commit: str | None = None) -> li
 def parse_text(path: Path, repo_path: Path, commit: str | None = None) -> list[Chunk]:
     text = path.read_text(encoding="utf-8", errors="ignore")
     metadata = _base_metadata(path, repo_path, "text", commit)
-    return [_whole_file_chunk(text, metadata, "text_file")] if text.strip() else []
+    line_count = max(1, len(text.splitlines()))
+    return [
+        Chunk(
+            id=_chunk_id(metadata, "text_file", metadata["file_path"], 1, line_count),
+            content=text,
+            metadata=metadata
+            | {
+                "chunk_type": "text_file",
+                "symbol": metadata["file_path"],
+                "start_line": 1,
+                "end_line": line_count,
+            },
+        )
+    ] if text.strip() else []
 
 
-def _class_chunks(node: ast.ClassDef, lines: list[str], metadata: dict) -> list[Chunk]:
-    chunks: list[Chunk] = []
-    methods = [child for child in node.body if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))]
-    if not methods:
-        return [_node_chunk(node, lines, metadata, "class", node.name)]
+def _parse(source: bytes, language: Language) -> Tree:
+    parser = Parser()
+    parser.language = language
+    return parser.parse(source)
 
-    class_header_end = min(method.lineno for method in methods) - 2
-    if node.lineno - 1 <= class_header_end:
-        chunks.append(_line_chunk(lines, node.lineno - 1, class_header_end, metadata, "class", node.name))
+
+def _top_level_nodes(root: Node, node_types: set[str]) -> list[Node]:
+    return [node for node in root.children if node.type in node_types]
+
+
+def _class_chunks(source: bytes, lines: list[str], node: Node, metadata: dict) -> list[Chunk]:
+    class_name = _node_name(source, node)
+    methods = _class_methods(node)
+    chunks = [_node_chunk(source, lines, node, metadata, "class", class_name)]
 
     for method in methods:
+        method_name = _node_name(source, method)
         chunks.append(
-            _node_chunk(method, lines, metadata, "method", f"{node.name}.{method.name}", class_name=node.name)
+            _node_chunk(
+                source,
+                lines,
+                method,
+                metadata,
+                "method",
+                f"{class_name}.{method_name}",
+                extra={"class_name": class_name},
+            )
         )
+
     return chunks
 
 
+def _class_methods(class_node: Node) -> list[Node]:
+    body = class_node.child_by_field_name("body")
+    if body is None:
+        return []
+    return [node for node in body.children if node.type == "function_definition"]
+
+
+def _import_chunk(source: bytes, imports: list[Node], metadata: dict) -> Chunk:
+    start_line = imports[0].start_point[0] + 1
+    end_line = imports[-1].end_point[0] + 1
+    content = "\n".join(_decode(source[node.start_byte : node.end_byte]) for node in imports)
+    return Chunk(
+        id=_chunk_id(metadata, "imports", "imports", start_line, end_line),
+        content=content,
+        metadata=metadata
+        | {
+            "chunk_type": "imports",
+            "symbol": "imports",
+            "start_line": start_line,
+            "end_line": end_line,
+        },
+    )
+
+
 def _node_chunk(
-    node: ast.AST,
+    source: bytes,
     lines: list[str],
+    node: Node,
     metadata: dict,
     chunk_type: str,
     symbol: str,
-    class_name: str | None = None,
+    extra: dict | None = None,
 ) -> Chunk:
-    start = getattr(node, "lineno", 1) - 1
-    end = getattr(node, "end_lineno", start + 1) - 1
-    extra = {"class_name": class_name} if class_name else {}
+    start = node.start_point[0]
+    end = node.end_point[0]
     return _line_chunk(lines, start, end, metadata, chunk_type, symbol, extra)
 
 
@@ -140,19 +178,24 @@ def _line_chunk(
     )
 
 
-def _whole_file_chunk(content: str, metadata: dict, chunk_type: str) -> Chunk:
-    line_count = max(1, len(content.splitlines()))
-    return Chunk(
-        id=_chunk_id(metadata, chunk_type, metadata["file_path"], 1, line_count),
-        content=content,
-        metadata=metadata
-        | {
-            "chunk_type": chunk_type,
-            "symbol": metadata["file_path"],
-            "start_line": 1,
-            "end_line": line_count,
-        },
-    )
+def _node_name(source: bytes, node: Node) -> str:
+    name = node.child_by_field_name("name")
+    if name is None:
+        return "<anonymous>"
+    return _decode(source[name.start_byte : name.end_byte])
+
+
+def _markdown_heading_lines(tree: Tree) -> list[int]:
+    heading_lines: set[int] = set()
+    _collect_markdown_headings(tree.root_node, heading_lines)
+    return sorted(heading_lines)
+
+
+def _collect_markdown_headings(node: Node, heading_lines: set[int]) -> None:
+    if "heading" in node.type:
+        heading_lines.add(node.start_point[0])
+    for child in node.children:
+        _collect_markdown_headings(child, heading_lines)
 
 
 def _base_metadata(path: Path, repo_path: Path, language: str, commit: str | None) -> dict:
@@ -166,12 +209,8 @@ def _base_metadata(path: Path, repo_path: Path, language: str, commit: str | Non
     }
 
 
-def _collect_imports(tree: ast.AST) -> list[str]:
-    imports: list[str] = []
-    for node in ast.iter_child_nodes(tree):
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            imports.append(ast.unparse(node))
-    return imports
+def _decode(source: bytes) -> str:
+    return source.decode("utf-8", errors="ignore")
 
 
 def _chunk_id(metadata: dict, chunk_type: str, symbol: str, start_line: int, end_line: int) -> str:
@@ -187,4 +226,3 @@ def _chunk_id(metadata: dict, chunk_type: str, symbol: str, start_line: int, end
         ]
     )
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()
-
