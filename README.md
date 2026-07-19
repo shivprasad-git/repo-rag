@@ -12,7 +12,7 @@ It can:
 - Discover `.py`, `.md`, and `.txt` files.
 - Parse Python and Markdown with Tree-sitter.
 - Split Markdown by headings.
-- Create chunk objects with file, symbol, signature, docstring, decorators, calls, heading hierarchy, line, language, repo, and commit metadata.
+- Create chunk objects with file, symbol, qualified symbol, signature, docstring, decorators, calls, test flags, parse errors, heading hierarchy, line, language, repo, and commit metadata.
 - Generate embeddings through a pluggable interface.
 - Store embeddings, content, and metadata in Chroma or a local JSON vector store.
 - Retrieve top-k chunks for a user question with hybrid vector + keyword search.
