@@ -14,6 +14,7 @@ It can:
 - Split Markdown by headings.
 - Create chunk objects with file, symbol, qualified symbol, signature, docstring, decorators, calls, test flags, parse errors, heading hierarchy, line, language, repo, and commit metadata.
 - Keep Python class chunks compact by storing class headers, docstrings, and class attributes separately from method chunks.
+- Normalize file-level metadata into `file_metadata` chunks so imports and parse error details are stored once per file instead of repeated on every chunk.
 - Generate embeddings through a pluggable interface.
 - Store embeddings, content, and metadata in Chroma or a local JSON vector store.
 - Retrieve top-k chunks for a user question with hybrid vector + keyword search.

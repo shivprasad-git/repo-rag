@@ -41,6 +41,7 @@ def test_python_and_markdown_chunking(tmp_path: Path) -> None:
     assert "AuthService.validate_token" in symbols
     assert "login_route" in symbols
     assert "test_login_route" in symbols
+    assert "auth.py" in symbols
     assert "Auth" in symbols
     assert "Login" in symbols
     assert "Install" in symbols
@@ -60,6 +61,12 @@ def test_python_and_markdown_chunking(tmp_path: Path) -> None:
     assert method_metadata["qualified_symbol"] == "auth.AuthService.validate_token"
     assert method_metadata["module"] == "auth"
     assert method_metadata["has_parse_errors"] is False
+    assert method_metadata["parse_error_lines"] == ""
+    assert "imports" not in method_metadata
+    file_metadata = chunks_by_symbol["auth.py"].metadata
+    assert file_metadata["chunk_type"] == "file_metadata"
+    assert file_metadata["imports"] == "import jwt"
+    assert method_metadata["file_metadata_id"] == file_metadata["file_metadata_id"]
     route_metadata = chunks_by_symbol["login_route"].metadata
     assert route_metadata["signature"] == "async def login_route(username: str) -> str:"
     assert route_metadata["decorators"] == "@router.post('/login')"
@@ -78,4 +85,6 @@ def test_tree_sitter_parse_error_metadata(tmp_path: Path) -> None:
 
     assert chunks
     assert any(chunk.metadata["has_parse_errors"] for chunk in chunks)
-    assert any(chunk.metadata["parse_error_lines"] for chunk in chunks)
+    file_metadata_chunks = [chunk for chunk in chunks if chunk.metadata["chunk_type"] == "file_metadata"]
+    assert file_metadata_chunks
+    assert any(chunk.metadata["parse_error_lines"] for chunk in file_metadata_chunks)

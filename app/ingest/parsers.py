@@ -35,7 +35,10 @@ def parse_python(path: Path, repo_path: Path, commit: str | None = None) -> list
     chunks: list[Chunk] = []
     imports = _top_level_nodes(root, {"import_statement", "import_from_statement"})
     import_text = _join_metadata_values(_node_text(source, node) for node in imports)
-    python_metadata = metadata | _parse_error_metadata(root) | {"imports": import_text}
+    parse_error_metadata = _parse_error_metadata(root)
+    file_metadata_id = _file_metadata_id(metadata)
+    python_metadata = metadata | _light_parse_error_metadata(parse_error_metadata) | {"file_metadata_id": file_metadata_id}
+    chunks.append(_file_metadata_chunk(metadata, file_metadata_id, import_text, parse_error_metadata))
     if imports:
         chunks.append(_import_chunk(source, imports, python_metadata))
 
@@ -239,6 +242,33 @@ def _import_chunk(source: bytes, imports: list[Node], metadata: dict) -> Chunk:
             "qualified_symbol": _qualify_symbol(metadata, "imports"),
             "start_line": start_line,
             "end_line": end_line,
+        },
+    )
+
+
+def _file_metadata_chunk(metadata: dict, file_metadata_id: str, imports: str, parse_error_metadata: dict) -> Chunk:
+    content_lines = [
+        f"file: {metadata['file_path']}",
+        f"module: {metadata.get('module', '')}",
+    ]
+    if imports:
+        content_lines.extend(["imports:", imports])
+    if parse_error_metadata["parse_error_lines"]:
+        content_lines.append(f"parse_error_lines: {parse_error_metadata['parse_error_lines']}")
+
+    return Chunk(
+        id=file_metadata_id,
+        content="\n".join(content_lines),
+        metadata=metadata
+        | parse_error_metadata
+        | {
+            "chunk_type": "file_metadata",
+            "symbol": metadata["file_path"],
+            "qualified_symbol": _qualify_symbol(metadata, metadata["file_path"]),
+            "start_line": 1,
+            "end_line": 1,
+            "imports": imports,
+            "file_metadata_id": file_metadata_id,
         },
     )
 
@@ -449,6 +479,17 @@ def _parse_error_metadata(root: Node) -> dict:
         "has_parse_errors": root.has_error,
         "parse_error_lines": ",".join(str(line) for line in sorted(error_lines)),
     }
+
+
+def _light_parse_error_metadata(parse_error_metadata: dict) -> dict:
+    return {
+        "has_parse_errors": parse_error_metadata["has_parse_errors"],
+        "parse_error_lines": "",
+    }
+
+
+def _file_metadata_id(metadata: dict) -> str:
+    return _chunk_id(metadata, "file_metadata", metadata["file_path"], 1, 1)
 
 
 def _parse_error_chunks(lines: list[str], root: Node, metadata: dict) -> list[Chunk]:
