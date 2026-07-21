@@ -13,6 +13,7 @@ It can:
 - Parse Python and Markdown with Tree-sitter.
 - Split Markdown by headings.
 - Create chunk objects with file, symbol, qualified symbol, signature, docstring, decorators, calls, test flags, parse errors, heading hierarchy, line, language, repo, and commit metadata.
+- Keep Python class chunks compact by storing class headers, docstrings, and class attributes separately from method chunks.
 - Generate embeddings through a pluggable interface.
 - Store embeddings, content, and metadata in Chroma or a local JSON vector store.
 - Retrieve top-k chunks for a user question with hybrid vector + keyword search.

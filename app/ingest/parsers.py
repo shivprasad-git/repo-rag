@@ -135,14 +135,13 @@ def _class_chunks(source: bytes, lines: list[str], chunk_node: Node, definition_
     class_name = _node_name(source, definition_node)
     methods = _class_methods(definition_node)
     chunks = [
-        _node_chunk(
+        _class_header_chunk(
             source,
             lines,
             chunk_node,
+            definition_node,
             metadata,
-            "class",
             class_name,
-            definition_node=definition_node,
         )
     ]
 
@@ -162,6 +161,56 @@ def _class_chunks(source: bytes, lines: list[str], chunk_node: Node, definition_
         )
 
     return chunks
+
+
+def _class_header_chunk(
+    source: bytes,
+    lines: list[str],
+    chunk_node: Node,
+    definition_node: Node,
+    metadata: dict,
+    class_name: str,
+) -> Chunk:
+    start = chunk_node.start_point[0]
+    content = "\n".join(_class_header_lines(source, lines, chunk_node, definition_node))
+    metadata_extra = _python_metadata(source, chunk_node, definition_node, metadata, class_name, None)
+    metadata_extra["calls"] = ""
+    return Chunk(
+        id=_chunk_id(metadata, "class", class_name, start + 1, start + len(content.splitlines())),
+        content=content,
+        metadata=metadata
+        | {
+            "chunk_type": "class",
+            "symbol": class_name,
+            "qualified_symbol": _qualify_symbol(metadata, class_name),
+            "start_line": start + 1,
+            "end_line": start + len(content.splitlines()),
+        }
+        | metadata_extra,
+    )
+
+
+def _class_header_lines(source: bytes, lines: list[str], chunk_node: Node, definition_node: Node) -> list[str]:
+    header_lines = _decorators(source, chunk_node)
+    header_lines.append(_signature(source, definition_node))
+    docstring = _docstring(source, definition_node)
+    if docstring:
+        header_lines.append(f'    """{docstring}"""')
+    header_lines.extend(_class_attribute_lines(source, definition_node))
+    return header_lines
+
+
+def _class_attribute_lines(source: bytes, class_node: Node) -> list[str]:
+    body = class_node.child_by_field_name("body")
+    if body is None:
+        return []
+    attribute_lines: list[str] = []
+    for node in body.children:
+        if _definition_node(node) is not None or _is_docstring_statement(node):
+            continue
+        if _contains_type(node, {"assignment", "type_alias_statement", "future_import_statement"}):
+            attribute_lines.append(_node_text(source, node).strip())
+    return attribute_lines
 
 
 def _class_methods(class_node: Node) -> list[tuple[Node, Node]]:
@@ -298,6 +347,10 @@ def _docstring(source: bytes, node: Node) -> str:
     return ""
 
 
+def _is_docstring_statement(node: Node) -> bool:
+    return node.type == "expression_statement" and _first_child_of_type(node, "string") is not None
+
+
 def _decorators(source: bytes, node: Node) -> list[str]:
     if node.type != "decorated_definition":
         return []
@@ -328,6 +381,12 @@ def _first_child_of_type(node: Node, node_type: str) -> Node | None:
         if child.type == node_type:
             return child
     return None
+
+
+def _contains_type(node: Node, node_types: set[str]) -> bool:
+    if node.type in node_types:
+        return True
+    return any(_contains_type(child, node_types) for child in node.children)
 
 
 def _strip_string_quotes(text: str) -> str:

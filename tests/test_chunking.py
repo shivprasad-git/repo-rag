@@ -12,6 +12,7 @@ def test_python_and_markdown_chunking(tmp_path: Path) -> None:
                 "",
                 "class AuthService:",
                 "    \"\"\"Authentication helpers.\"\"\"",
+                "    TOKEN_TTL = 3600",
                 "",
                 "    @staticmethod",
                 "    def validate_token(token):",
@@ -43,6 +44,12 @@ def test_python_and_markdown_chunking(tmp_path: Path) -> None:
     assert "Auth" in symbols
     assert "Login" in symbols
     assert "Install" in symbols
+    class_chunk = chunks_by_symbol["AuthService"]
+    assert "class AuthService:" in class_chunk.content
+    assert "Authentication helpers." in class_chunk.content
+    assert "TOKEN_TTL = 3600" in class_chunk.content
+    assert "def validate_token" not in class_chunk.content
+    assert "jwt.decode" not in class_chunk.content
     method_metadata = chunks_by_symbol["AuthService.validate_token"].metadata
     assert method_metadata["signature"] == "def validate_token(token):"
     assert method_metadata["docstring"] == "Validate a JWT token."
