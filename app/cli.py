@@ -12,7 +12,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Repo RAG Phase 1 MVP")
     parser.add_argument("--store", choices=["chroma", "simple"], default="chroma")
     parser.add_argument("--index-name", default=None)
-    parser.add_argument("--embedding-provider", choices=["sentence-transformers", "hash"], default=None)
+    parser.add_argument("--embedding-provider", choices=["sentence-transformers"], default=None)
     parser.add_argument("--embedding-model", default=None)
     subparsers = parser.add_subparsers(dest="command", required=True)
 

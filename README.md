@@ -61,14 +61,6 @@ sentence-transformers/all-MiniLM-L6-v2
 
 This gives real semantic embeddings, so related phrases like `login`, `sign in`, and `authenticate` can land closer together.
 
-For fully offline deterministic development, use the hash provider:
-
-```bash
-python3 -m app.cli --embedding-provider hash --store simple --index-name sample ask \
-  --repo work/sample_repo \
-  --question "How does login work?"
-```
-
 You can also override the semantic model:
 
 ```bash

@@ -1,8 +1,17 @@
 from app.docstore import SimpleJsonChunkStore
-from app.embeddings import HashEmbeddingProvider
+from app.embeddings import EmbeddingProvider
 from app.models import Chunk
 from app.retrieval.search import Retriever
 from app.vectorstore.simple_store import SimpleJsonVectorStore
+
+
+class TestEmbeddingProvider(EmbeddingProvider):
+    @property
+    def dimensions(self) -> int:
+        return 2
+
+    def embed(self, text: str) -> list[float]:
+        return [1.0, 0.0] if "login" in text.lower() else [0.0, 1.0]
 
 
 def test_hybrid_retrieval_uses_keyword_matches(tmp_path) -> None:
@@ -32,7 +41,7 @@ def test_hybrid_retrieval_uses_keyword_matches(tmp_path) -> None:
             },
         ),
     ]
-    embedder = HashEmbeddingProvider()
+    embedder = TestEmbeddingProvider()
     chunk_store.add(chunks)
     store.add(chunks, embedder.embed_many([chunk.content for chunk in chunks]))
     vector_record = store._load_records()[0]
