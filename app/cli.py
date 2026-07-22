@@ -12,7 +12,6 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Repo RAG Phase 1 MVP")
     parser.add_argument("--store", choices=["chroma", "simple"], default="chroma")
     parser.add_argument("--index-name", default=None)
-    parser.add_argument("--embedding-provider", choices=["sentence-transformers"], default=None)
     parser.add_argument("--embedding-model", default=None)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -72,10 +71,9 @@ def _add_filter_args(parser: argparse.ArgumentParser) -> None:
 
 def _settings_from_args(args: argparse.Namespace) -> Settings:
     settings = Settings()
-    if args.embedding_provider is None and args.embedding_model is None:
+    if args.embedding_model is None:
         return settings
     return Settings(
-        embedding_provider=args.embedding_provider or settings.embedding_provider,
         embedding_model=args.embedding_model or settings.embedding_model,
     )
 

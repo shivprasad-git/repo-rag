@@ -61,11 +61,10 @@ sentence-transformers/all-MiniLM-L6-v2
 
 This gives real semantic embeddings, so related phrases like `login`, `sign in`, and `authenticate` can land closer together.
 
-You can also override the semantic model:
+You can also override the embedding model:
 
 ```bash
-python3 -m app.cli --embedding-provider sentence-transformers \
-  --embedding-model sentence-transformers/all-MiniLM-L6-v2 \
+python3 -m app.cli --embedding-model sentence-transformers/all-MiniLM-L6-v2 \
   --store simple \
   --index-name sample \
   query --question "How does login work?"

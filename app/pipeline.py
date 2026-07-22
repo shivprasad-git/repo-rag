@@ -14,9 +14,7 @@ from app.vectorstore import build_vector_store
 
 
 def build_embedder(settings: Settings) -> EmbeddingProvider:
-    if settings.embedding_provider == "sentence-transformers":
-        return SentenceTransformerEmbeddingProvider(model_name=settings.embedding_model)
-    raise ValueError(f"Unsupported embedding provider: {settings.embedding_provider}")
+    return SentenceTransformerEmbeddingProvider(model_name=settings.embedding_model)
 
 
 def index_repository(repo: str, store_kind: str, settings: Settings, index_name: str | None = None) -> tuple[Path, int]:

@@ -11,7 +11,6 @@ class Settings:
     repositories_dir: Path = base_dir / "data" / "repositories"
     indexes_dir: Path = base_dir / "indexes"
     collection_name: str = "repo_rag"
-    embedding_provider: str = os.getenv("REPO_RAG_EMBEDDING_PROVIDER", "sentence-transformers")
     embedding_model: str = os.getenv("REPO_RAG_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
     embedding_dimensions: int = 384
     supported_extensions: tuple[str, ...] = (".py", ".md", ".txt")
