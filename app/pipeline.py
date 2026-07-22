@@ -4,7 +4,7 @@ from pathlib import Path
 
 from app.config import Settings
 from app.docstore import build_chunk_store
-from app.embeddings import HashEmbeddingProvider
+from app.embeddings import EmbeddingProvider, HashEmbeddingProvider, SentenceTransformerEmbeddingProvider
 from app.ingest.chunker import create_chunks
 from app.ingest.repository import load_repository
 from app.llm import build_prompt
@@ -13,10 +13,12 @@ from app.retrieval.search import Retriever
 from app.vectorstore import build_vector_store
 
 
-def build_embedder(settings: Settings) -> HashEmbeddingProvider:
-    if settings.embedding_provider != "hash":
-        raise ValueError(f"Unsupported embedding provider: {settings.embedding_provider}")
-    return HashEmbeddingProvider(dimensions=settings.embedding_dimensions)
+def build_embedder(settings: Settings) -> EmbeddingProvider:
+    if settings.embedding_provider == "hash":
+        return HashEmbeddingProvider(dimensions=settings.embedding_dimensions)
+    if settings.embedding_provider == "sentence-transformers":
+        return SentenceTransformerEmbeddingProvider(model_name=settings.embedding_model)
+    raise ValueError(f"Unsupported embedding provider: {settings.embedding_provider}")
 
 
 def index_repository(repo: str, store_kind: str, settings: Settings, index_name: str | None = None) -> tuple[Path, int]:

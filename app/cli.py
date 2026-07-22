@@ -12,6 +12,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Repo RAG Phase 1 MVP")
     parser.add_argument("--store", choices=["chroma", "simple"], default="chroma")
     parser.add_argument("--index-name", default=None)
+    parser.add_argument("--embedding-provider", choices=["sentence-transformers", "hash"], default=None)
+    parser.add_argument("--embedding-model", default=None)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     index_parser = subparsers.add_parser("index", help="Index a GitHub URL or local repository")
@@ -30,7 +32,7 @@ def main() -> None:
     _add_filter_args(ask_parser)
 
     args = parser.parse_args()
-    settings = Settings()
+    settings = _settings_from_args(args)
 
     if args.command == "index":
         repo_path, chunk_count = index_repository(args.repo, args.store, settings, args.index_name)
@@ -66,6 +68,16 @@ def _add_filter_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--language", help="Only retrieve chunks for this language, e.g. python or markdown")
     parser.add_argument("--chunk-type", help="Only retrieve this chunk type, e.g. function, method, class")
     parser.add_argument("--path", dest="path_prefix", help="Only retrieve chunks whose file path starts with this value")
+
+
+def _settings_from_args(args: argparse.Namespace) -> Settings:
+    settings = Settings()
+    if args.embedding_provider is None and args.embedding_model is None:
+        return settings
+    return Settings(
+        embedding_provider=args.embedding_provider or settings.embedding_provider,
+        embedding_model=args.embedding_model or settings.embedding_model,
+    )
 
 
 def _metadata_filters_from_args(args: argparse.Namespace) -> MetadataFilters | None:

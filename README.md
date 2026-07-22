@@ -51,6 +51,34 @@ python3 -m app.cli --store simple --index-name flask query \
   --top-k 5
 ```
 
+## Embeddings
+
+The default embedding provider is `sentence-transformers` with:
+
+```text
+sentence-transformers/all-MiniLM-L6-v2
+```
+
+This gives real semantic embeddings, so related phrases like `login`, `sign in`, and `authenticate` can land closer together.
+
+For fully offline deterministic development, use the hash provider:
+
+```bash
+python3 -m app.cli --embedding-provider hash --store simple --index-name sample ask \
+  --repo work/sample_repo \
+  --question "How does login work?"
+```
+
+You can also override the semantic model:
+
+```bash
+python3 -m app.cli --embedding-provider sentence-transformers \
+  --embedding-model sentence-transformers/all-MiniLM-L6-v2 \
+  --store simple \
+  --index-name sample \
+  query --question "How does login work?"
+```
+
 Narrow retrieval with metadata filters:
 
 ```bash
@@ -93,7 +121,7 @@ Endpoints:
 
 ## Notes
 
-The default embedding provider is deterministic and local. It is useful for development and tests because it requires no API keys or network access. For production-quality retrieval, add a provider backed by a real embedding model while keeping the same `EmbeddingProvider` interface.
+Changing embedding models requires rebuilding the vector index, because each model produces vectors in its own vector space.
 
 ## Credits
 
