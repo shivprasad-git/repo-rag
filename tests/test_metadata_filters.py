@@ -1,7 +1,8 @@
+from app.docstore import SimpleJsonChunkStore
 from app.embeddings import HashEmbeddingProvider
 from app.models import Chunk
-from app.retrieval import Retriever
 from app.retrieval.filters import MetadataFilters
+from app.retrieval.search import Retriever
 from app.vectorstore.simple_store import SimpleJsonVectorStore
 
 
@@ -24,6 +25,7 @@ def test_metadata_filters_match_language_chunk_type_and_path() -> None:
 
 def test_hybrid_retrieval_respects_metadata_filters(tmp_path) -> None:
     store = SimpleJsonVectorStore(tmp_path / "index.json")
+    chunk_store = SimpleJsonChunkStore(tmp_path / "chunks.json")
     chunks = [
         Chunk(
             id="auth-doc",
@@ -51,9 +53,10 @@ def test_hybrid_retrieval_respects_metadata_filters(tmp_path) -> None:
         ),
     ]
     embedder = HashEmbeddingProvider()
+    chunk_store.add(chunks)
     store.add(chunks, embedder.embed_many([chunk.content for chunk in chunks]))
 
-    matches = Retriever(embedder, store).retrieve(
+    matches = Retriever(embedder, store, chunk_store=chunk_store).retrieve(
         "login",
         top_k=5,
         filters=MetadataFilters(chunk_type="method"),

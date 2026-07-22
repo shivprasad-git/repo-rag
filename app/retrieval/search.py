@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.embeddings import EmbeddingProvider
 from app.models import Chunk
+from app.docstore.simple_store import SimpleJsonChunkStore
 from app.retrieval.filters import MetadataFilters
 from app.retrieval.keyword import BM25KeywordIndex
 from app.vectorstore.base import VectorStore
@@ -12,11 +13,13 @@ class Retriever:
         self,
         embedder: EmbeddingProvider,
         vector_store: VectorStore,
+        chunk_store: SimpleJsonChunkStore | None = None,
         vector_weight: float = 0.25,
         keyword_weight: float = 0.75,
     ) -> None:
         self.embedder = embedder
         self.vector_store = vector_store
+        self.chunk_store = chunk_store
         self.vector_weight = vector_weight
         self.keyword_weight = keyword_weight
 
@@ -37,18 +40,29 @@ class Retriever:
         query_embedding = self.embedder.embed(question)
         candidate_count = max(top_k * 4, 20)
         vector_matches = self.vector_store.search(query_embedding, top_k=candidate_count, filters=filters)
-        keyword_matches = BM25KeywordIndex(self.vector_store.all_chunks(filters=filters)).search(
+        keyword_candidates = self._all_full_chunks(filters)
+        keyword_matches = BM25KeywordIndex(keyword_candidates).search(
             question,
             top_k=candidate_count,
         )
 
         merged: dict[str, tuple[Chunk, float]] = {}
         for chunk, score in _normalize(vector_matches):
-            _add_score(merged, chunk, score * self.vector_weight)
+            _add_score(merged, self._hydrate(chunk), score * self.vector_weight)
         for chunk, score in _normalize(keyword_matches):
             _add_score(merged, chunk, score * self.keyword_weight)
 
         return sorted(merged.values(), key=lambda item: item[1], reverse=True)[:top_k]
+
+    def _all_full_chunks(self, filters: MetadataFilters | None) -> list[Chunk]:
+        if self.chunk_store is not None:
+            return self.chunk_store.all_chunks(filters=filters)
+        return self.vector_store.all_chunks(filters=filters)
+
+    def _hydrate(self, chunk: Chunk) -> Chunk:
+        if self.chunk_store is None:
+            return chunk
+        return self.chunk_store.get(chunk.id) or chunk
 
 
 def _normalize(matches: list[tuple[Chunk, float]]) -> list[tuple[Chunk, float]]:

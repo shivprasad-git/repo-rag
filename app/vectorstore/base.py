@@ -23,3 +23,22 @@ class VectorStore(ABC):
     @abstractmethod
     def all_chunks(self, filters: MetadataFilters | None = None) -> list[Chunk]:
         raise NotImplementedError
+
+
+def minimal_vector_metadata(chunk: Chunk) -> dict:
+    metadata = chunk.metadata
+    keys = (
+        "repo",
+        "file_path",
+        "module",
+        "language",
+        "commit",
+        "chunk_type",
+        "symbol",
+        "qualified_symbol",
+        "start_line",
+        "end_line",
+        "file_metadata_id",
+        "has_parse_errors",
+    )
+    return {key: metadata.get(key, "") for key in keys}

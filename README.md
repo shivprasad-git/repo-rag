@@ -16,7 +16,8 @@ It can:
 - Keep Python class chunks compact by storing class headers, docstrings, and class attributes separately from method chunks.
 - Normalize file-level metadata into `file_metadata` chunks so imports and parse error details are stored once per file instead of repeated on every chunk.
 - Generate embeddings through a pluggable interface.
-- Store embeddings, content, and metadata in Chroma or a local JSON vector store.
+- Store embeddings with minimal filter metadata in Chroma or a local JSON vector store.
+- Store full chunk content and full metadata separately in a JSON chunk document store.
 - Retrieve top-k chunks for a user question with hybrid vector + keyword search.
 - Build an LLM-ready prompt from retrieved repository context.
 

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from app.models import Chunk
 from app.retrieval.filters import MetadataFilters, filter_chunks
-from app.vectorstore.base import VectorStore
+from app.vectorstore.base import VectorStore, minimal_vector_metadata
 
 
 class ChromaVectorStore(VectorStore):
@@ -24,8 +24,8 @@ class ChromaVectorStore(VectorStore):
         self.collection.upsert(
             ids=[chunk.id for chunk in chunks],
             embeddings=embeddings,
-            documents=[chunk.content for chunk in chunks],
-            metadatas=[chunk.metadata for chunk in chunks],
+            documents=["" for _ in chunks],
+            metadatas=[minimal_vector_metadata(chunk) for chunk in chunks],
         )
 
     def search(

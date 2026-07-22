@@ -1,11 +1,13 @@
+from app.docstore import SimpleJsonChunkStore
 from app.embeddings import HashEmbeddingProvider
 from app.models import Chunk
-from app.retrieval import Retriever
+from app.retrieval.search import Retriever
 from app.vectorstore.simple_store import SimpleJsonVectorStore
 
 
 def test_hybrid_retrieval_uses_keyword_matches(tmp_path) -> None:
     store = SimpleJsonVectorStore(tmp_path / "index.json")
+    chunk_store = SimpleJsonChunkStore(tmp_path / "chunks.json")
     chunks = [
         Chunk(
             id="auth-login",
@@ -31,8 +33,27 @@ def test_hybrid_retrieval_uses_keyword_matches(tmp_path) -> None:
         ),
     ]
     embedder = HashEmbeddingProvider()
+    chunk_store.add(chunks)
     store.add(chunks, embedder.embed_many([chunk.content for chunk in chunks]))
+    vector_record = store._load_records()[0]
+    assert "content" not in vector_record
+    assert "embedding" in vector_record
+    assert set(vector_record["metadata"]) <= {
+        "repo",
+        "file_path",
+        "module",
+        "language",
+        "commit",
+        "chunk_type",
+        "symbol",
+        "qualified_symbol",
+        "start_line",
+        "end_line",
+        "file_metadata_id",
+        "has_parse_errors",
+    }
 
-    matches = Retriever(embedder, store).retrieve("login_user", top_k=1)
+    matches = Retriever(embedder, store, chunk_store=chunk_store).retrieve("login_user", top_k=1)
 
     assert matches[0][0].id == "auth-login"
+    assert matches[0][0].content.startswith("def login_user")

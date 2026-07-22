@@ -6,7 +6,7 @@ from pathlib import Path
 
 from app.models import Chunk
 from app.retrieval.filters import MetadataFilters, filter_chunks
-from app.vectorstore.base import VectorStore
+from app.vectorstore.base import VectorStore, minimal_vector_metadata
 
 
 class SimpleJsonVectorStore(VectorStore):
@@ -20,8 +20,7 @@ class SimpleJsonVectorStore(VectorStore):
         for chunk, embedding in zip(chunks, embeddings):
             by_id[chunk.id] = {
                 "id": chunk.id,
-                "content": chunk.content,
-                "metadata": chunk.metadata,
+                "metadata": minimal_vector_metadata(chunk),
                 "embedding": embedding,
             }
         self.path.write_text(json.dumps(list(by_id.values()), indent=2), encoding="utf-8")
@@ -35,13 +34,13 @@ class SimpleJsonVectorStore(VectorStore):
         scored: list[tuple[Chunk, float]] = []
         for record in self._filtered_records(filters):
             score = _cosine_similarity(query_embedding, record["embedding"])
-            chunk = Chunk(id=record["id"], content=record["content"], metadata=record["metadata"])
+            chunk = Chunk(id=record["id"], content="", metadata=record["metadata"])
             scored.append((chunk, score))
         return sorted(scored, key=lambda item: item[1], reverse=True)[:top_k]
 
     def all_chunks(self, filters: MetadataFilters | None = None) -> list[Chunk]:
         return [
-            Chunk(id=record["id"], content=record["content"], metadata=record["metadata"])
+            Chunk(id=record["id"], content="", metadata=record["metadata"])
             for record in self._filtered_records(filters)
         ]
 
@@ -55,7 +54,7 @@ class SimpleJsonVectorStore(VectorStore):
         if filters is None or not filters.has_filters:
             return records
         chunks = [
-            Chunk(id=record["id"], content=record["content"], metadata=record["metadata"])
+            Chunk(id=record["id"], content="", metadata=record["metadata"])
             for record in records
         ]
         matching_ids = {chunk.id for chunk in filter_chunks(chunks, filters)}

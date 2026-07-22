@@ -3,12 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.config import Settings
+from app.docstore import build_chunk_store
 from app.embeddings import HashEmbeddingProvider
 from app.ingest.chunker import create_chunks
 from app.ingest.repository import load_repository
 from app.llm import build_prompt
 from app.retrieval.filters import MetadataFilters
-from app.retrieval import Retriever
+from app.retrieval.search import Retriever
 from app.vectorstore import build_vector_store
 
 
@@ -23,7 +24,10 @@ def index_repository(repo: str, store_kind: str, settings: Settings, index_name:
     chunks = create_chunks(repo_path, settings)
     embedder = build_embedder(settings)
     embeddings = embedder.embed_many([chunk.content for chunk in chunks])
+    name = index_name or settings.collection_name
+    chunk_store = build_chunk_store(settings.indexes_dir, name)
     vector_store = build_vector_store(store_kind, settings, index_name=index_name)
+    chunk_store.add(chunks)
     vector_store.add(chunks, embeddings)
     return repo_path, len(chunks)
 
@@ -37,8 +41,10 @@ def query_repository(
     filters: MetadataFilters | None = None,
 ):
     embedder = build_embedder(settings)
+    name = index_name or settings.collection_name
+    chunk_store = build_chunk_store(settings.indexes_dir, name)
     vector_store = build_vector_store(store_kind, settings, index_name=index_name)
-    return Retriever(embedder, vector_store).retrieve(question, top_k=top_k, filters=filters)
+    return Retriever(embedder, vector_store, chunk_store=chunk_store).retrieve(question, top_k=top_k, filters=filters)
 
 
 def ask_repository(
