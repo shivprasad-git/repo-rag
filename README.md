@@ -114,6 +114,23 @@ Endpoints:
 
 Changing embedding models requires rebuilding the vector index, because each model produces vectors in its own vector space.
 
+## Reranking
+
+Retrieval uses hybrid vector + keyword search to gather candidates, then reranks them with:
+
+```text
+cross-encoder/ms-marco-MiniLM-L-6-v2
+```
+
+The reranker reads the question and each candidate chunk together, then returns a stronger relevance ordering for the final top-k results.
+
+Disable reranking when you want a faster local smoke test:
+
+```bash
+python3 -m app.cli --no-reranker --store simple --index-name sample query \
+  --question "How does login work?"
+```
+
 ## Credits
 
 <p align="center">

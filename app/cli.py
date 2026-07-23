@@ -13,6 +13,8 @@ def main() -> None:
     parser.add_argument("--store", choices=["chroma", "simple"], default="chroma")
     parser.add_argument("--index-name", default=None)
     parser.add_argument("--embedding-model", default=None)
+    parser.add_argument("--reranker-model", default=None)
+    parser.add_argument("--no-reranker", action="store_true", help="Disable MiniLM cross-encoder reranking")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     index_parser = subparsers.add_parser("index", help="Index a GitHub URL or local repository")
@@ -71,10 +73,12 @@ def _add_filter_args(parser: argparse.ArgumentParser) -> None:
 
 def _settings_from_args(args: argparse.Namespace) -> Settings:
     settings = Settings()
-    if args.embedding_model is None:
+    if args.embedding_model is None and args.reranker_model is None and not args.no_reranker:
         return settings
     return Settings(
         embedding_model=args.embedding_model or settings.embedding_model,
+        reranker_model=args.reranker_model or settings.reranker_model,
+        reranker_enabled=False if args.no_reranker else settings.reranker_enabled,
     )
 
 

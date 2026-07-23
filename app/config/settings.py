@@ -13,6 +13,8 @@ class Settings:
     collection_name: str = "repo_rag"
     embedding_model: str = os.getenv("REPO_RAG_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
     embedding_dimensions: int = 384
+    reranker_model: str = os.getenv("REPO_RAG_RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
+    reranker_enabled: bool = os.getenv("REPO_RAG_RERANKER_ENABLED", "true").lower() == "true"
     supported_extensions: tuple[str, ...] = (".py", ".md", ".txt")
     ignored_dirs: tuple[str, ...] = (
         ".git",

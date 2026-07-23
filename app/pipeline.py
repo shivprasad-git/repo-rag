@@ -9,12 +9,19 @@ from app.ingest.chunker import create_chunks
 from app.ingest.repository import load_repository
 from app.llm import build_prompt
 from app.retrieval.filters import MetadataFilters
+from app.retrieval.reranker import CrossEncoderMiniLMReranker, Reranker
 from app.retrieval.search import Retriever
 from app.vectorstore import build_vector_store
 
 
 def build_embedder(settings: Settings) -> EmbeddingProvider:
     return SentenceTransformerEmbeddingProvider(model_name=settings.embedding_model)
+
+
+def build_reranker(settings: Settings) -> Reranker | None:
+    if not settings.reranker_enabled:
+        return None
+    return CrossEncoderMiniLMReranker(model_name=settings.reranker_model)
 
 
 def index_repository(repo: str, store_kind: str, settings: Settings, index_name: str | None = None) -> tuple[Path, int]:
@@ -39,10 +46,15 @@ def query_repository(
     filters: MetadataFilters | None = None,
 ):
     embedder = build_embedder(settings)
+    reranker = build_reranker(settings)
     name = index_name or settings.collection_name
     chunk_store = build_chunk_store(settings.indexes_dir, name)
     vector_store = build_vector_store(store_kind, settings, index_name=index_name)
-    return Retriever(embedder, vector_store, chunk_store=chunk_store).retrieve(question, top_k=top_k, filters=filters)
+    return Retriever(embedder, vector_store, chunk_store=chunk_store, reranker=reranker).retrieve(
+        question,
+        top_k=top_k,
+        filters=filters,
+    )
 
 
 def ask_repository(

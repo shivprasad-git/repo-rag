@@ -5,6 +5,7 @@ from app.models import Chunk
 from app.docstore.simple_store import SimpleJsonChunkStore
 from app.retrieval.filters import MetadataFilters
 from app.retrieval.keyword import BM25KeywordIndex
+from app.retrieval.reranker import Reranker
 from app.vectorstore.base import VectorStore
 
 
@@ -14,12 +15,14 @@ class Retriever:
         embedder: EmbeddingProvider,
         vector_store: VectorStore,
         chunk_store: SimpleJsonChunkStore | None = None,
+        reranker: Reranker | None = None,
         vector_weight: float = 0.25,
         keyword_weight: float = 0.75,
     ) -> None:
         self.embedder = embedder
         self.vector_store = vector_store
         self.chunk_store = chunk_store
+        self.reranker = reranker
         self.vector_weight = vector_weight
         self.keyword_weight = keyword_weight
 
@@ -52,7 +55,10 @@ class Retriever:
         for chunk, score in _normalize(keyword_matches):
             _add_score(merged, chunk, score * self.keyword_weight)
 
-        return sorted(merged.values(), key=lambda item: item[1], reverse=True)[:top_k]
+        candidates = sorted(merged.values(), key=lambda item: item[1], reverse=True)
+        if self.reranker is not None:
+            return self.reranker.rerank(question, candidates, top_k=top_k)
+        return candidates[:top_k]
 
     def _all_full_chunks(self, filters: MetadataFilters | None) -> list[Chunk]:
         if self.chunk_store is not None:
