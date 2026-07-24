@@ -6,7 +6,7 @@
 
 Repo RAG is a Phase 1 retrieval-augmented generation MVP for GitHub repositories.
 
-It can:
+Current capabilities:
 
 - Clone a GitHub repository or load a local repo.
 - Discover `.py`, `.md`, and `.txt` files.
@@ -19,6 +19,7 @@ It can:
 - Store embeddings with minimal filter metadata in Chroma or a local JSON vector store.
 - Store full chunk content and full metadata separately in a JSON chunk document store.
 - Retrieve top-k chunks for a user question with hybrid vector + keyword search.
+- Rerank retrieved candidates with a MiniLM cross-encoder.
 - Build an LLM-ready prompt from retrieved repository context.
 
 ## Setup
@@ -51,6 +52,24 @@ python3 -m app.cli --store simple --index-name flask query \
   --top-k 5
 ```
 
+Narrow retrieval with metadata filters:
+
+```bash
+python3 -m app.cli --store simple --index-name flask query \
+  --question "Where is login implemented?" \
+  --language python \
+  --chunk-type method \
+  --path app
+```
+
+Print an LLM-ready prompt instead of raw matches:
+
+```bash
+python3 -m app.cli --store simple --index-name flask query \
+  --question "How is routing implemented?" \
+  --prompt
+```
+
 ## Embeddings
 
 The default embedding provider is `sentence-transformers` with:
@@ -70,27 +89,26 @@ python3 -m app.cli --embedding-model sentence-transformers/all-MiniLM-L6-v2 \
   query --question "How does login work?"
 ```
 
-Narrow retrieval with metadata filters:
+## Reranking
 
-```bash
-python3 -m app.cli --store simple --index-name flask query \
-  --question "Where is login implemented?" \
-  --language python \
-  --chunk-type method \
-  --path app
+Retrieval uses hybrid vector + keyword search to gather candidates, then reranks them with:
+
+```text
+cross-encoder/ms-marco-MiniLM-L-6-v2
 ```
 
-Print an LLM-ready prompt instead of raw matches:
+The reranker reads the question and each candidate chunk together, then returns a stronger relevance ordering for the final top-k results.
+
+Disable reranking when you want a faster local smoke test:
 
 ```bash
-python3 -m app.cli --store simple --index-name flask query \
-  --question "How is routing implemented?" \
-  --prompt
+python3 -m app.cli --no-reranker --store simple --index-name sample query \
+  --question "How does login work?"
 ```
 
 ## End-To-End Ask
 
-`ask` indexes the repo, retrieves relevant chunks, and prints the prompt to send to an LLM.
+`ask` indexes the repo, retrieves relevant chunks, reranks them, and prints the prompt to send to an LLM.
 
 ```bash
 python3 -m app.cli --store simple --index-name sample ask \
@@ -113,23 +131,6 @@ Endpoints:
 ## Notes
 
 Changing embedding models requires rebuilding the vector index, because each model produces vectors in its own vector space.
-
-## Reranking
-
-Retrieval uses hybrid vector + keyword search to gather candidates, then reranks them with:
-
-```text
-cross-encoder/ms-marco-MiniLM-L-6-v2
-```
-
-The reranker reads the question and each candidate chunk together, then returns a stronger relevance ordering for the final top-k results.
-
-Disable reranking when you want a faster local smoke test:
-
-```bash
-python3 -m app.cli --no-reranker --store simple --index-name sample query \
-  --question "How does login work?"
-```
 
 ## Credits
 
