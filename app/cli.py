@@ -26,6 +26,8 @@ def main() -> None:
     query_parser.add_argument("--top-k", type=int, default=5)
     query_parser.add_argument("--prompt", action="store_true", help="Print an LLM prompt instead of raw matches")
     query_parser.add_argument("--json", action="store_true", help="Print retrieved chunks as JSON")
+    query_parser.add_argument("--show-content", action="store_true", help="Print a content preview for each match")
+    query_parser.add_argument("--content-chars", type=int, default=700, help="Maximum preview characters per match")
     _add_filter_args(query_parser)
 
     ask_parser = subparsers.add_parser("ask", help="Index a repository and print an LLM-ready prompt")
@@ -54,7 +56,7 @@ def main() -> None:
         elif args.json:
             print(_matches_as_json(matches))
         else:
-            _print_matches(matches)
+            _print_matches(matches, show_content=args.show_content, content_chars=args.content_chars)
     elif args.command == "ask":
         print(
             ask_repository(
@@ -95,11 +97,23 @@ def _metadata_filters_from_args(args: argparse.Namespace) -> MetadataFilters | N
     return filters if filters.has_filters else None
 
 
-def _print_matches(matches) -> None:
+def _print_matches(matches, show_content: bool = False, content_chars: int = 700) -> None:
     for index, (chunk, score) in enumerate(matches, start=1):
         metadata = chunk.metadata
         print(f"{index}. score={score:.4f} {metadata.get('file_path')}:{metadata.get('start_line')}-{metadata.get('end_line')}")
         print(f"   {metadata.get('chunk_type')} {metadata.get('symbol')}")
+        if show_content:
+            print(_preview_content(chunk.content, content_chars))
+
+
+def _preview_content(content: str, max_chars: int) -> str:
+    if max_chars <= 0:
+        return ""
+    preview = content.strip()
+    if len(preview) > max_chars:
+        preview = f"{preview[:max_chars].rstrip()}..."
+    indented = "\n".join(f"   | {line}" for line in preview.splitlines())
+    return indented or "   |"
 
 
 def _matches_as_json(matches) -> str:
