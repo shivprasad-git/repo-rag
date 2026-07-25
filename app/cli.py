@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 
 from app.config import Settings
 from app.llm import build_prompt
@@ -24,6 +25,7 @@ def main() -> None:
     query_parser.add_argument("--question", required=True)
     query_parser.add_argument("--top-k", type=int, default=5)
     query_parser.add_argument("--prompt", action="store_true", help="Print an LLM prompt instead of raw matches")
+    query_parser.add_argument("--json", action="store_true", help="Print retrieved chunks as JSON")
     _add_filter_args(query_parser)
 
     ask_parser = subparsers.add_parser("ask", help="Index a repository and print an LLM-ready prompt")
@@ -49,6 +51,8 @@ def main() -> None:
         )
         if args.prompt:
             print(build_prompt(args.question, matches))
+        elif args.json:
+            print(_matches_as_json(matches))
         else:
             _print_matches(matches)
     elif args.command == "ask":
@@ -96,6 +100,20 @@ def _print_matches(matches) -> None:
         metadata = chunk.metadata
         print(f"{index}. score={score:.4f} {metadata.get('file_path')}:{metadata.get('start_line')}-{metadata.get('end_line')}")
         print(f"   {metadata.get('chunk_type')} {metadata.get('symbol')}")
+
+
+def _matches_as_json(matches) -> str:
+    records = []
+    for chunk, score in matches:
+        records.append(
+            {
+                "id": chunk.id,
+                "score": score,
+                "content": chunk.content,
+                "metadata": chunk.metadata,
+            }
+        )
+    return json.dumps(records, indent=2, sort_keys=True)
 
 
 if __name__ == "__main__":
