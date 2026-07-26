@@ -69,6 +69,9 @@ class ChromaVectorStore(VectorStore):
         ]
         return filter_chunks(chunks, filters)
 
+    def has_data(self) -> bool:
+        return self.collection.count() > 0
+
 
 def _chroma_where(filters: MetadataFilters | None) -> dict | None:
     if filters is None:

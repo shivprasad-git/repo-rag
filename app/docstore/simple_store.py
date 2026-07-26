@@ -39,6 +39,12 @@ class SimpleJsonChunkStore:
         ]
         return filter_chunks(chunks, filters)
 
+    def has_data(self) -> bool:
+        if not self.path.exists():
+            return False
+        records = json.loads(self.path.read_text(encoding="utf-8"))
+        return len(records) > 0
+
 
 def build_chunk_store(indexes_dir: Path, index_name: str) -> SimpleJsonChunkStore:
     return SimpleJsonChunkStore(indexes_dir / "chunks" / f"{index_name}.json")

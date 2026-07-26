@@ -66,6 +66,10 @@ def ask_repository(
     index_name: str | None = None,
     filters: MetadataFilters | None = None,
 ) -> str:
-    index_repository(repo, store_kind, settings, index_name=index_name)
+    name = index_name or settings.collection_name
+    chunk_store = build_chunk_store(settings.indexes_dir, name)
+    vector_store = build_vector_store(store_kind, settings, index_name=index_name)
+    if not chunk_store.has_data() or not vector_store.has_data():
+        index_repository(repo, store_kind, settings, index_name=index_name)
     matches = query_repository(question, store_kind, settings, top_k, index_name=index_name, filters=filters)
     return build_prompt(question, matches)

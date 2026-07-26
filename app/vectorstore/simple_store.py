@@ -44,6 +44,10 @@ class SimpleJsonVectorStore(VectorStore):
             for record in self._filtered_records(filters)
         ]
 
+    def has_data(self) -> bool:
+        records = self._load_records()
+        return len(records) > 0
+
     def _load_records(self) -> list[dict]:
         if not self.path.exists():
             return []

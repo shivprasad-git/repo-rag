@@ -24,6 +24,11 @@ class VectorStore(ABC):
     def all_chunks(self, filters: MetadataFilters | None = None) -> list[Chunk]:
         raise NotImplementedError
 
+    @abstractmethod
+    def has_data(self) -> bool:
+        """Return True if this store already contains indexed data."""
+        raise NotImplementedError
+
 
 def minimal_vector_metadata(chunk: Chunk) -> dict:
     metadata = chunk.metadata
