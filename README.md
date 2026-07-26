@@ -108,14 +108,16 @@ python3 -m app.cli --no-reranker --store simple --index-name sample query \
 
 ## End-To-End Ask
 
-`ask` indexes the repo, retrieves relevant chunks, reranks them, and prints the prompt to send to an LLM.
+`ask` retrieves relevant chunks for a question and prints the prompt to send to an LLM. The first time you run `ask` for a given `--index-name`, it indexes the repository. Subsequent runs skip re-indexing and go straight to retrieval, making repeated queries fast.
 
 ```bash
-python3 -m app.cli --store simple --index-name sample ask \
+python3 -m app.cli --store simple --index-name smoke ask \
   --repo work/sample_repo \
   --question "How does login work?" \
   --top-k 3
 ```
+
+To force a fresh index, delete the existing index files or run the `index` command explicitly.
 
 ## Optional API
 
@@ -139,5 +141,3 @@ Changing embedding models requires rebuilding the vector index, because each mod
   &nbsp;&nbsp;
   <img src="assets/deepseek-color.svg" alt="DeepSeek logo" width="42">
 </p>
-
-Built with help from Codex and DeepSeek.
