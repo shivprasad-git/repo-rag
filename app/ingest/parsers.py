@@ -463,8 +463,6 @@ def _markdown_heading_title(source: bytes, node: Node) -> str:
 def _base_metadata(path: Path, repo_path: Path, language: str, commit: str | None) -> dict:
     relative = path.relative_to(repo_path)
     return {
-        "repo": repo_path.name,
-        "repo_path": str(repo_path),
         "file_path": str(relative),
         "module": _module_name(relative) if language == "python" else "",
         "language": language,
@@ -556,7 +554,6 @@ def _join_metadata_values(values) -> str:
 def _chunk_id(metadata: dict, chunk_type: str, symbol: str, start_line: int, end_line: int) -> str:
     raw = "|".join(
         [
-            str(metadata.get("repo")),
             str(metadata.get("commit")),
             str(metadata.get("file_path")),
             chunk_type,

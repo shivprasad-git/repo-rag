@@ -33,7 +33,6 @@ class VectorStore(ABC):
 def minimal_vector_metadata(chunk: Chunk) -> dict:
     metadata = chunk.metadata
     keys = (
-        "repo",
         "file_path",
         "module",
         "language",

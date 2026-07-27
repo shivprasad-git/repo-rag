@@ -63,7 +63,6 @@ def test_hybrid_retrieval_uses_keyword_matches(tmp_path) -> None:
     assert "content" not in vector_record
     assert "embedding" in vector_record
     assert set(vector_record["metadata"]) <= {
-        "repo",
         "file_path",
         "module",
         "language",
