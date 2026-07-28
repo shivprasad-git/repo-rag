@@ -15,6 +15,14 @@ class Settings:
     reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     reranker_enabled: bool = True
     supported_extensions: tuple[str, ...] = (".py", ".md", ".txt")
+    searchable_chunk_types: tuple[str, ...] = (
+        "class",
+        "function",
+        "method",
+        "imports",
+        "markdown_section",
+        "text_file",
+    )
     ignored_dirs: tuple[str, ...] = (
         ".git",
         ".venv",

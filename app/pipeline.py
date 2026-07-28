@@ -7,6 +7,7 @@ from app.docstore import build_chunk_store
 from app.embeddings import EmbeddingProvider, SentenceTransformerEmbeddingProvider
 from app.ingest.chunker import create_chunks
 from app.ingest.repository import load_repository
+from app.ingest.searchable import searchable_chunks
 from app.llm import build_prompt
 from app.retrieval.filters import MetadataFilters
 from app.retrieval.reranker import CrossEncoderMiniLMReranker, Reranker
@@ -28,12 +29,13 @@ def index_repository(repo: str, store_kind: str, settings: Settings, index_name:
     repo_path = load_repository(repo, settings.repositories_dir)
     chunks = create_chunks(repo_path, settings)
     embedder = build_embedder(settings)
-    embeddings = embedder.embed_many([chunk.content for chunk in chunks])
+    vector_chunks = searchable_chunks(chunks, settings)
+    embeddings = embedder.embed_many([chunk.content for chunk in vector_chunks])
     name = index_name or settings.collection_name
     chunk_store = build_chunk_store(settings.indexes_dir, name)
     vector_store = build_vector_store(store_kind, settings, index_name=index_name)
     chunk_store.add(chunks)
-    vector_store.add(chunks, embeddings)
+    vector_store.add(vector_chunks, embeddings)
     return repo_path, len(chunks)
 
 
@@ -50,7 +52,7 @@ def query_repository(
     name = index_name or settings.collection_name
     chunk_store = build_chunk_store(settings.indexes_dir, name)
     vector_store = build_vector_store(store_kind, settings, index_name=index_name)
-    return Retriever(embedder, vector_store, chunk_store=chunk_store, reranker=reranker).retrieve(
+    return Retriever(embedder, vector_store, settings=settings, chunk_store=chunk_store, reranker=reranker).retrieve(
         question,
         top_k=top_k,
         filters=filters,

@@ -1,4 +1,5 @@
 from app.docstore import SimpleJsonChunkStore
+from app.config import Settings
 from app.embeddings import EmbeddingProvider
 from app.models import Chunk
 from app.retrieval.filters import MetadataFilters
@@ -65,10 +66,65 @@ def test_hybrid_retrieval_respects_metadata_filters(tmp_path) -> None:
     chunk_store.add(chunks)
     store.add(chunks, embedder.embed_many([chunk.content for chunk in chunks]))
 
-    matches = Retriever(embedder, store, chunk_store=chunk_store).retrieve(
+    matches = Retriever(embedder, store, settings=Settings(), chunk_store=chunk_store).retrieve(
         "login",
         top_k=5,
         filters=MetadataFilters(chunk_type="method"),
     )
 
     assert [chunk.id for chunk, _ in matches] == ["auth-method"]
+
+
+def test_default_retrieval_skips_metadata_chunks(tmp_path) -> None:
+    store = SimpleJsonVectorStore(tmp_path / "index.json")
+    chunk_store = SimpleJsonChunkStore(tmp_path / "chunks.json")
+    settings = Settings()
+    indexed_chunks = [
+        Chunk(
+            id="auth-method",
+            content="def login(self):\n    return create_token()",
+            metadata={"chunk_type": "method", "file_path": "auth.py"},
+        )
+    ]
+    metadata_chunk = Chunk(
+        id="auth-file-metadata",
+        content="file: auth.py\nimports:\nimport secret_login_metadata",
+        metadata={"chunk_type": "file_metadata", "file_path": "auth.py"},
+    )
+    embedder = TestEmbeddingProvider()
+    chunk_store.add(indexed_chunks + [metadata_chunk])
+    store.add(indexed_chunks, embedder.embed_many([chunk.content for chunk in indexed_chunks]))
+
+    matches = Retriever(embedder, store, settings=settings, chunk_store=chunk_store).retrieve(
+        "secret_login_metadata",
+        top_k=5,
+    )
+
+    assert [chunk.id for chunk, _ in matches] == ["auth-method"]
+
+
+def test_chunk_type_filter_can_search_metadata_chunks(tmp_path) -> None:
+    store = SimpleJsonVectorStore(tmp_path / "index.json")
+    chunk_store = SimpleJsonChunkStore(tmp_path / "chunks.json")
+    settings = Settings()
+    indexed_chunk = Chunk(
+        id="auth-method",
+        content="def login(self):\n    return create_token()",
+        metadata={"chunk_type": "method", "file_path": "auth.py"},
+    )
+    metadata_chunk = Chunk(
+        id="auth-file-metadata",
+        content="file: auth.py\nimports:\nimport secret_login_metadata",
+        metadata={"chunk_type": "file_metadata", "file_path": "auth.py"},
+    )
+    embedder = TestEmbeddingProvider()
+    chunk_store.add([indexed_chunk, metadata_chunk])
+    store.add([indexed_chunk], embedder.embed_many([indexed_chunk.content]))
+
+    matches = Retriever(embedder, store, settings=settings, chunk_store=chunk_store).retrieve(
+        "secret_login_metadata",
+        top_k=5,
+        filters=MetadataFilters(chunk_type="file_metadata"),
+    )
+
+    assert [chunk.id for chunk, _ in matches] == ["auth-file-metadata"]

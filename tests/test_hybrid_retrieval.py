@@ -1,4 +1,5 @@
 from app.docstore import SimpleJsonChunkStore
+from app.config import Settings
 from app.embeddings import EmbeddingProvider
 from app.models import Chunk
 from app.retrieval.reranker import Reranker
@@ -76,7 +77,7 @@ def test_hybrid_retrieval_uses_keyword_matches(tmp_path) -> None:
         "has_parse_errors",
     }
 
-    matches = Retriever(embedder, store, chunk_store=chunk_store).retrieve("login_user", top_k=1)
+    matches = Retriever(embedder, store, settings=Settings(), chunk_store=chunk_store).retrieve("login_user", top_k=1)
 
     assert matches[0][0].id == "auth-login"
     assert matches[0][0].content.startswith("def login_user")
@@ -96,6 +97,7 @@ def test_retriever_applies_reranker(tmp_path) -> None:
     matches = Retriever(
         embedder,
         store,
+        settings=Settings(),
         chunk_store=chunk_store,
         reranker=PreferBillingReranker(),
     ).retrieve("login_user", top_k=1)

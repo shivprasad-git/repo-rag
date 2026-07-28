@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from app.embeddings import EmbeddingProvider
+from app.config import Settings
 from app.models import Chunk
 from app.docstore.simple_store import SimpleJsonChunkStore
+from app.ingest.searchable import searchable_chunks
 from app.retrieval.filters import MetadataFilters
 from app.retrieval.keyword import BM25KeywordIndex
 from app.retrieval.reranker import Reranker
@@ -14,6 +16,7 @@ class Retriever:
         self,
         embedder: EmbeddingProvider,
         vector_store: VectorStore,
+        settings: Settings,
         chunk_store: SimpleJsonChunkStore | None = None,
         reranker: Reranker | None = None,
         vector_weight: float = 0.25,
@@ -21,6 +24,7 @@ class Retriever:
     ) -> None:
         self.embedder = embedder
         self.vector_store = vector_store
+        self.settings = settings
         self.chunk_store = chunk_store
         self.reranker = reranker
         self.vector_weight = vector_weight
@@ -62,8 +66,8 @@ class Retriever:
 
     def _all_full_chunks(self, filters: MetadataFilters | None) -> list[Chunk]:
         if self.chunk_store is not None:
-            return self.chunk_store.all_chunks(filters=filters)
-        return self.vector_store.all_chunks(filters=filters)
+            return searchable_chunks(self.chunk_store.all_chunks(filters=filters), self.settings, filters=filters)
+        return searchable_chunks(self.vector_store.all_chunks(filters=filters), self.settings, filters=filters)
 
     def _hydrate(self, chunk: Chunk) -> Chunk:
         if self.chunk_store is None:

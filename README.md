@@ -18,6 +18,7 @@ Current capabilities:
 - Generate embeddings through a pluggable interface.
 - Store embeddings with minimal filter metadata in Chroma or a local JSON vector store.
 - Store full chunk content and full metadata separately in a JSON chunk document store.
+- Embed only searchable code/documentation chunks by default; keep file metadata chunks in the document store without adding them to normal semantic retrieval.
 - Retrieve top-k chunks for a user question with hybrid vector + keyword search.
 - Rerank retrieved candidates with a MiniLM cross-encoder.
 - Build an LLM-ready prompt from retrieved repository context.
@@ -133,6 +134,8 @@ Endpoints:
 ## Notes
 
 Changing embedding models requires rebuilding the vector index, because each model produces vectors in its own vector space.
+
+Chunk storage and chunk retrieval are intentionally separate. Repo RAG stores metadata chunks, parse details, and searchable code/documentation chunks in the chunk document store, but only indexes configured searchable chunk types into the vector store. This keeps metadata available without adding noise to normal semantic search.
 
 ## Credits
 
