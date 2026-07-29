@@ -19,7 +19,6 @@ class Settings:
         "class",
         "function",
         "method",
-        "imports",
         "markdown_section",
         "text_file",
     )
