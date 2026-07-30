@@ -81,7 +81,7 @@ def _chroma_where(filters: MetadataFilters | None) -> dict | None:
     if filters.language:
         clauses.append({"language": filters.language})
     if filters.chunk_type:
-        clauses.append({"chunk_type": filters.chunk_type})
+        clauses.append({"chunk_type": filters.chunk_type_value})
 
     if not clauses:
         return None

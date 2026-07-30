@@ -1,7 +1,7 @@
 from app.docstore import SimpleJsonChunkStore
 from app.config import Settings
 from app.embeddings import EmbeddingProvider
-from app.models import Chunk
+from app.models import Chunk, ChunkType
 from app.retrieval.filters import MetadataFilters
 from app.retrieval.search import Retriever
 from app.vectorstore.simple_store import SimpleJsonVectorStore
@@ -27,7 +27,7 @@ def test_metadata_filters_match_language_chunk_type_and_path() -> None:
     )
 
     assert MetadataFilters(language="python").matches(chunk)
-    assert MetadataFilters(chunk_type="function").matches(chunk)
+    assert MetadataFilters(chunk_type=ChunkType.FUNCTION).matches(chunk)
     assert MetadataFilters(path_prefix="app").matches(chunk)
     assert not MetadataFilters(language="markdown").matches(chunk)
     assert not MetadataFilters(path_prefix="docs").matches(chunk)
@@ -69,7 +69,7 @@ def test_hybrid_retrieval_respects_metadata_filters(tmp_path) -> None:
     matches = Retriever(embedder, store, settings=Settings(), chunk_store=chunk_store).retrieve(
         "login",
         top_k=5,
-        filters=MetadataFilters(chunk_type="method"),
+        filters=MetadataFilters(chunk_type=ChunkType.METHOD),
     )
 
     assert [chunk.id for chunk, _ in matches] == ["auth-method"]
@@ -124,7 +124,7 @@ def test_chunk_type_filter_can_search_metadata_chunks(tmp_path) -> None:
     matches = Retriever(embedder, store, settings=settings, chunk_store=chunk_store).retrieve(
         "secret_login_metadata",
         top_k=5,
-        filters=MetadataFilters(chunk_type="file_metadata"),
+        filters=MetadataFilters(chunk_type=ChunkType.FILE_METADATA),
     )
 
     assert [chunk.id for chunk, _ in matches] == ["auth-file-metadata"]

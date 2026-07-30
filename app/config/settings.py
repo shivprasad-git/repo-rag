@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.models import ChunkType
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -15,18 +17,18 @@ class Settings:
     reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     reranker_enabled: bool = True
     supported_extensions: tuple[str, ...] = (".py", ".md", ".txt")
-    searchable_chunk_types: tuple[str, ...] = (
-        "class",
-        "function",
-        "method",
-        "markdown_section",
-        "text_file",
+    searchable_chunk_types: tuple[ChunkType, ...] = (
+        ChunkType.CLASS,
+        ChunkType.FUNCTION,
+        ChunkType.METHOD,
+        ChunkType.MARKDOWN_SECTION,
+        ChunkType.TEXT_FILE,
     )
-    splittable_chunk_types: tuple[str, ...] = (
-        "function",
-        "method",
-        "markdown_section",
-        "text_file",
+    splittable_chunk_types: tuple[ChunkType, ...] = (
+        ChunkType.FUNCTION,
+        ChunkType.METHOD,
+        ChunkType.MARKDOWN_SECTION,
+        ChunkType.TEXT_FILE,
     )
     max_chunk_tokens: int = 700
     chunk_overlap_tokens: int = 100

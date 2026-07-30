@@ -35,7 +35,8 @@ def _split_chunk(chunk: Chunk, settings: Settings) -> list[Chunk]:
 def _should_split(chunk: Chunk, settings: Settings) -> bool:
     if settings.max_chunk_tokens <= 0:
         return False
-    if chunk.metadata.get("chunk_type", "") not in settings.splittable_chunk_types:
+    splittable_types = {chunk_type.value for chunk_type in settings.splittable_chunk_types}
+    if chunk.metadata.get("chunk_type", "") not in splittable_types:
         return False
     return estimate_tokens(chunk.content) > settings.max_chunk_tokens
 

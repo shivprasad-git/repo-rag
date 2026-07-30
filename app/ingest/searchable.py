@@ -6,7 +6,8 @@ from app.retrieval.filters import MetadataFilters
 
 
 def is_searchable_chunk(chunk: Chunk, settings: Settings) -> bool:
-    return chunk.metadata.get("chunk_type", "") in settings.searchable_chunk_types
+    searchable_types = {chunk_type.value for chunk_type in settings.searchable_chunk_types}
+    return chunk.metadata.get("chunk_type", "") in searchable_types
 
 
 def searchable_chunks(

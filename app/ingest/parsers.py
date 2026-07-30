@@ -7,7 +7,7 @@ from tree_sitter import Language, Node, Parser, Tree
 import tree_sitter_markdown
 import tree_sitter_python
 
-from app.models import Chunk
+from app.models import Chunk, ChunkType
 
 
 PYTHON_LANGUAGE = Language(tree_sitter_python.language())
@@ -56,7 +56,7 @@ def parse_python(path: Path, repo_path: Path, commit: str | None = None) -> list
                     lines,
                     node,
                     python_metadata,
-                    "function",
+                    ChunkType.FUNCTION,
                     name,
                     definition_node=definition,
                 )
@@ -74,7 +74,7 @@ def parse_markdown(path: Path, repo_path: Path, commit: str | None = None) -> li
     headings = _markdown_headings(tree, source)
 
     if not headings and lines:
-        return [_line_chunk(lines, 0, len(lines) - 1, metadata, "markdown_section", "Document")]
+        return [_line_chunk(lines, 0, len(lines) - 1, metadata, ChunkType.MARKDOWN_SECTION, "Document")]
 
     chunks: list[Chunk] = []
     heading_stack: list[tuple[int, str]] = []
@@ -91,7 +91,7 @@ def parse_markdown(path: Path, repo_path: Path, commit: str | None = None) -> li
                 start,
                 end,
                 metadata,
-                "markdown_section",
+                ChunkType.MARKDOWN_SECTION,
                 title,
                 {
                     "heading": title,
@@ -111,11 +111,11 @@ def parse_text(path: Path, repo_path: Path, commit: str | None = None) -> list[C
     line_count = max(1, len(text.splitlines()))
     return [
         Chunk(
-            id=_chunk_id(metadata, "text_file", metadata["file_path"], 1, line_count),
+            id=_chunk_id(metadata, ChunkType.TEXT_FILE, metadata["file_path"], 1, line_count),
             content=text,
             metadata=metadata
             | {
-                "chunk_type": "text_file",
+                "chunk_type": ChunkType.TEXT_FILE.value,
                 "symbol": metadata["file_path"],
                 "start_line": 1,
                 "end_line": line_count,
@@ -156,7 +156,7 @@ def _class_chunks(source: bytes, lines: list[str], chunk_node: Node, definition_
                 lines,
                 method_chunk_node,
                 metadata,
-                "method",
+                ChunkType.METHOD,
                 f"{class_name}.{method_name}",
                 extra={"class_name": class_name},
                 definition_node=method_definition,
@@ -179,11 +179,11 @@ def _class_header_chunk(
     metadata_extra = _python_metadata(source, chunk_node, definition_node, metadata, class_name, None)
     metadata_extra["calls"] = ""
     return Chunk(
-        id=_chunk_id(metadata, "class", class_name, start + 1, start + len(content.splitlines())),
+        id=_chunk_id(metadata, ChunkType.CLASS, class_name, start + 1, start + len(content.splitlines())),
         content=content,
         metadata=metadata
         | {
-            "chunk_type": "class",
+            "chunk_type": ChunkType.CLASS.value,
             "symbol": class_name,
             "qualified_symbol": _qualify_symbol(metadata, class_name),
             "start_line": start + 1,
@@ -233,11 +233,11 @@ def _import_chunk(source: bytes, imports: list[Node], metadata: dict) -> Chunk:
     end_line = imports[-1].end_point[0] + 1
     content = "\n".join(_decode(source[node.start_byte : node.end_byte]) for node in imports)
     return Chunk(
-        id=_chunk_id(metadata, "imports", "imports", start_line, end_line),
+        id=_chunk_id(metadata, ChunkType.IMPORTS, "imports", start_line, end_line),
         content=content,
         metadata=metadata
         | {
-            "chunk_type": "imports",
+            "chunk_type": ChunkType.IMPORTS.value,
             "symbol": "imports",
             "qualified_symbol": _qualify_symbol(metadata, "imports"),
             "start_line": start_line,
@@ -262,7 +262,7 @@ def _file_metadata_chunk(metadata: dict, file_metadata_id: str, imports: str, pa
         metadata=metadata
         | parse_error_metadata
         | {
-            "chunk_type": "file_metadata",
+            "chunk_type": ChunkType.FILE_METADATA.value,
             "symbol": metadata["file_path"],
             "qualified_symbol": _qualify_symbol(metadata, metadata["file_path"]),
             "start_line": 1,
@@ -278,7 +278,7 @@ def _node_chunk(
     lines: list[str],
     node: Node,
     metadata: dict,
-    chunk_type: str,
+    chunk_type: ChunkType,
     symbol: str,
     extra: dict | None = None,
     definition_node: Node | None = None,
@@ -302,7 +302,7 @@ def _line_chunk(
     start: int,
     end: int,
     metadata: dict,
-    chunk_type: str,
+    chunk_type: ChunkType,
     symbol: str,
     extra: dict | None = None,
 ) -> Chunk:
@@ -311,7 +311,7 @@ def _line_chunk(
         content="\n".join(lines[start : end + 1]),
         metadata=metadata
         | {
-            "chunk_type": chunk_type,
+            "chunk_type": chunk_type.value,
             "symbol": symbol,
             "qualified_symbol": _qualify_symbol(metadata, symbol),
             "start_line": start + 1,
@@ -487,7 +487,7 @@ def _light_parse_error_metadata(parse_error_metadata: dict) -> dict:
 
 
 def _file_metadata_id(metadata: dict) -> str:
-    return _chunk_id(metadata, "file_metadata", metadata["file_path"], 1, 1)
+    return _chunk_id(metadata, ChunkType.FILE_METADATA, metadata["file_path"], 1, 1)
 
 
 def _parse_error_chunks(lines: list[str], root: Node, metadata: dict) -> list[Chunk]:
@@ -499,7 +499,7 @@ def _parse_error_chunks(lines: list[str], root: Node, metadata: dict) -> list[Ch
             error_node.start_point[0],
             error_node.end_point[0],
             metadata,
-            "parse_error",
+            ChunkType.PARSE_ERROR,
             f"parse_error:{error_node.start_point[0] + 1}",
         )
         for error_node in error_nodes
@@ -551,12 +551,12 @@ def _join_metadata_values(values) -> str:
     return "\n".join(value for value in values if value)
 
 
-def _chunk_id(metadata: dict, chunk_type: str, symbol: str, start_line: int, end_line: int) -> str:
+def _chunk_id(metadata: dict, chunk_type: ChunkType, symbol: str, start_line: int, end_line: int) -> str:
     raw = "|".join(
         [
             str(metadata.get("commit")),
             str(metadata.get("file_path")),
-            chunk_type,
+            chunk_type.value,
             symbol,
             str(start_line),
             str(end_line),
