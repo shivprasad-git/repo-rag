@@ -36,13 +36,22 @@ class Tokenizer:
         return AutoTokenizer.from_pretrained(self.model_name)
 
     def count(self, text: str) -> int:
-        return len(self._encode(text))
+        """Return the number of tokens the embedding model will see for *text*.
+
+        Includes special tokens (e.g. ``[CLS]`` / ``[SEP]``) so the
+        result matches what the model actually receives.
+        """
+        return len(self.tokenizer.encode(text, add_special_tokens=True))
 
     def count_many(self, texts: Sequence[str]) -> list[int]:
         """Return token counts for each text in *texts*.
 
         Uses batched encoding for efficiency.  The result list is in the
         same order as *texts*.
+
+        .. note::
+           Special tokens are **not** included in per-line counts
+           because they are added once per chunk, not per line.
         """
         return [len(ids) for ids in self._encode_many(list(texts))]
 
