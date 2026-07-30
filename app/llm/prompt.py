@@ -12,6 +12,7 @@ def build_prompt(question: str, matches: list[tuple[Chunk, float]]) -> str:
             "\n".join(
                 [
                     f"[Chunk {index}] score={score:.4f}",
+                    f"Role: {'neighbor context' if metadata.get('is_context_expansion') else 'retrieved match'}",
                     f"Location: {location}",
                     f"Symbol: {metadata.get('symbol')}",
                     f"Type: {metadata.get('chunk_type')}",
@@ -33,4 +34,3 @@ Retrieved context:
 
 Answer:
 """
-

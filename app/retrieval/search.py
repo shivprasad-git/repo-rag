@@ -61,8 +61,10 @@ class Retriever:
 
         candidates = sorted(merged.values(), key=lambda item: item[1], reverse=True)
         if self.reranker is not None:
-            return self.reranker.rerank(question, candidates, top_k=top_k)
-        return candidates[:top_k]
+            matches = self.reranker.rerank(question, candidates, top_k=top_k)
+        else:
+            matches = candidates[:top_k]
+        return self._expand_context_parts(matches)
 
     def _all_full_chunks(self, filters: MetadataFilters | None) -> list[Chunk]:
         if self.chunk_store is not None:
@@ -73,6 +75,45 @@ class Retriever:
         if self.chunk_store is None:
             return chunk
         return self.chunk_store.get(chunk.id) or chunk
+
+    def _expand_context_parts(self, matches: list[tuple[Chunk, float]]) -> list[tuple[Chunk, float]]:
+        if self.chunk_store is None or self.settings.context_window_parts <= 0:
+            return matches
+
+        expanded: list[tuple[Chunk, float]] = []
+        seen: set[str] = set()
+        for chunk, score in matches:
+            for context_chunk in self._context_parts(chunk):
+                if context_chunk.id in seen:
+                    continue
+                seen.add(context_chunk.id)
+                expanded.append((context_chunk, score))
+        return expanded
+
+    def _context_parts(self, chunk: Chunk) -> list[Chunk]:
+        metadata = chunk.metadata
+        if not metadata.get("is_chunk_part"):
+            return [chunk]
+
+        parent_id = str(metadata.get("parent_chunk_id", ""))
+        part_index = int(metadata.get("part_index", 0))
+        part_count = int(metadata.get("part_count", 0))
+        if not parent_id or part_index <= 0 or part_count <= 0:
+            return [chunk]
+
+        window = self.settings.context_window_parts
+        start = max(1, part_index - window)
+        end = min(part_count, part_index + window)
+        parts: list[Chunk] = []
+        for index in range(start, end + 1):
+            part = self.chunk_store.get(f"{parent_id}:part:{index}") if self.chunk_store is not None else None
+            if part is None:
+                continue
+            if part.id == chunk.id:
+                parts.append(part)
+            else:
+                parts.append(_context_expansion(part, chunk.id))
+        return parts or [chunk]
 
 
 def _normalize(matches: list[tuple[Chunk, float]]) -> list[tuple[Chunk, float]]:
@@ -90,3 +131,15 @@ def _add_score(merged: dict[str, tuple[Chunk, float]], chunk: Chunk, score: floa
         merged[chunk.id] = (chunk, score)
     else:
         merged[chunk.id] = (existing[0], existing[1] + score)
+
+
+def _context_expansion(chunk: Chunk, source_chunk_id: str) -> Chunk:
+    return Chunk(
+        id=chunk.id,
+        content=chunk.content,
+        metadata=chunk.metadata
+        | {
+            "is_context_expansion": True,
+            "context_source_chunk_id": source_chunk_id,
+        },
+    )

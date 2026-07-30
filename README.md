@@ -140,6 +140,8 @@ Chunk storage and chunk retrieval are intentionally separate. Repo RAG stores me
 
 Oversized chunks are split after parsing. By default, chunks over roughly `700` estimated tokens are split with `100` estimated tokens of overlap. Split parts keep the original `chunk_type` and add `is_chunk_part`, `part_index`, `part_count`, and `parent_chunk_id` metadata.
 
+When retrieval returns a split chunk part, Repo RAG includes one neighboring part on each side by default. This keeps retrieval precise while giving the final prompt enough nearby context.
+
 Chunk type names are centralized in `ChunkType`. Current values are `class`, `file_metadata`, `function`, `imports`, `markdown_section`, `method`, `parse_error`, and `text_file`.
 
 ## Credits

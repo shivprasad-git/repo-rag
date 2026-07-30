@@ -104,3 +104,43 @@ def test_retriever_applies_reranker(tmp_path) -> None:
 
     assert matches[0][0].id == "billing"
     assert matches[0][1] == 10.0
+
+
+def test_retriever_expands_neighboring_chunk_parts(tmp_path) -> None:
+    store = SimpleJsonVectorStore(tmp_path / "index.json")
+    chunk_store = SimpleJsonChunkStore(tmp_path / "chunks.json")
+    parent_id = "large-method"
+    chunks = [
+        Chunk(
+            id=f"{parent_id}:part:{index}",
+            content=f"part {index} {'login details' if index == 2 else 'setup'}",
+            metadata={
+                "chunk_type": "method",
+                "file_path": "auth.py",
+                "is_chunk_part": True,
+                "part_index": index,
+                "part_count": 3,
+                "parent_chunk_id": parent_id,
+            },
+        )
+        for index in range(1, 4)
+    ]
+    embedder = TestEmbeddingProvider()
+    chunk_store.add(chunks)
+    store.add(chunks, embedder.embed_many([chunk.content for chunk in chunks]))
+
+    matches = Retriever(
+        embedder,
+        store,
+        settings=Settings(context_window_parts=1),
+        chunk_store=chunk_store,
+    ).retrieve("login details", top_k=1)
+
+    assert [chunk.id for chunk, _ in matches] == [
+        "large-method:part:1",
+        "large-method:part:2",
+        "large-method:part:3",
+    ]
+    assert matches[0][0].metadata["is_context_expansion"] is True
+    assert "is_context_expansion" not in matches[1][0].metadata
+    assert matches[2][0].metadata["context_source_chunk_id"] == "large-method:part:2"
