@@ -4,7 +4,20 @@ from app.config import Settings
 from app.ingest.chunker import create_chunks
 
 
-def test_python_and_markdown_chunking(tmp_path: Path) -> None:
+class TestTokenizer:
+    def count(self, text: str) -> int:
+        return max(1, len(text) // 4)
+
+    def count_many(self, texts: list[str]) -> list[int]:
+        return [self.count(text) for text in texts]
+
+
+def _use_test_tokenizer(monkeypatch) -> None:
+    monkeypatch.setattr("app.ingest.splitter.get_tokenizer", lambda model_name: TestTokenizer())
+
+
+def test_python_and_markdown_chunking(tmp_path: Path, monkeypatch) -> None:
+    _use_test_tokenizer(monkeypatch)
     (tmp_path / "auth.py").write_text(
         "\n".join(
             [
@@ -78,7 +91,8 @@ def test_python_and_markdown_chunking(tmp_path: Path) -> None:
     assert chunks_by_symbol["Login"].metadata["parent_headings"] == "Auth"
 
 
-def test_tree_sitter_parse_error_metadata(tmp_path: Path) -> None:
+def test_tree_sitter_parse_error_metadata(tmp_path: Path, monkeypatch) -> None:
+    _use_test_tokenizer(monkeypatch)
     (tmp_path / "broken.py").write_text("def broken(:\n    pass\n", encoding="utf-8")
 
     chunks = create_chunks(tmp_path, Settings())
@@ -90,7 +104,8 @@ def test_tree_sitter_parse_error_metadata(tmp_path: Path) -> None:
     assert any(chunk.metadata["parse_error_lines"] for chunk in file_metadata_chunks)
 
 
-def test_oversized_method_chunks_are_split_into_parts(tmp_path: Path) -> None:
+def test_oversized_method_chunks_are_split_into_parts(tmp_path: Path, monkeypatch) -> None:
+    _use_test_tokenizer(monkeypatch)
     body_lines = [f"        value_{index} = {index}" for index in range(30)]
     (tmp_path / "large.py").write_text(
         "\n".join(["class LargeService:", "    def run(self):", *body_lines, "        return value_29"]),

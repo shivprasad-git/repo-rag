@@ -3,26 +3,24 @@ from __future__ import annotations
 from dataclasses import replace
 
 from app.config import Settings
+from app.ingest.tokenizer import get_tokenizer, Tokenizer
 from app.models import Chunk
 
 
 def split_oversized_chunks(chunks: list[Chunk], settings: Settings) -> list[Chunk]:
+    tokenizer = get_tokenizer(settings.embedding_model)
     split_chunks: list[Chunk] = []
     for chunk in chunks:
-        split_chunks.extend(_split_chunk(chunk, settings))
+        split_chunks.extend(_split_chunk(chunk, settings, tokenizer))
     return split_chunks
 
 
-def estimate_tokens(text: str) -> int:
-    return max(1, len(text) // 4)
-
-
-def _split_chunk(chunk: Chunk, settings: Settings) -> list[Chunk]:
-    if not _should_split(chunk, settings):
+def _split_chunk(chunk: Chunk, settings: Settings, tokenizer: Tokenizer) -> list[Chunk]:
+    if not _should_split(chunk, settings, tokenizer):
         return [chunk]
 
     lines = chunk.content.splitlines()
-    line_groups = _line_groups(lines, settings.max_chunk_tokens, settings.chunk_overlap_tokens)
+    line_groups = _line_groups(lines, settings.max_chunk_tokens, settings.chunk_overlap_tokens, tokenizer)
     if len(line_groups) <= 1:
         return [chunk]
 
@@ -32,26 +30,33 @@ def _split_chunk(chunk: Chunk, settings: Settings) -> list[Chunk]:
     ]
 
 
-def _should_split(chunk: Chunk, settings: Settings) -> bool:
+def _should_split(chunk: Chunk, settings: Settings, tokenizer: Tokenizer) -> bool:
     if settings.max_chunk_tokens <= 0:
         return False
     splittable_types = {chunk_type.value for chunk_type in settings.splittable_chunk_types}
     if chunk.metadata.get("chunk_type", "") not in splittable_types:
         return False
-    return estimate_tokens(chunk.content) > settings.max_chunk_tokens
+    return tokenizer.count(chunk.content) > settings.max_chunk_tokens
 
 
-def _line_groups(lines: list[str], max_tokens: int, overlap_tokens: int) -> list[list[tuple[int, str]]]:
+def _line_groups(
+    lines: list[str],
+    max_tokens: int,
+    overlap_tokens: int,
+    tokenizer: Tokenizer,
+) -> list[list[tuple[int, str]]]:
     groups: list[list[tuple[int, str]]] = []
     current: list[tuple[int, str]] = []
     current_tokens = 0
 
-    for line_number, line in enumerate(lines):
-        line_tokens = estimate_tokens(line)
+    # Pre-compute token counts for all lines to avoid repeated encode calls
+    line_token_counts = tokenizer.count_many(lines)
+
+    for line_number, (line, line_tokens) in enumerate(zip(lines, line_token_counts)):
         if current and current_tokens + line_tokens > max_tokens:
             groups.append(current)
-            current = _overlap_lines(current, overlap_tokens)
-            current_tokens = sum(estimate_tokens(line_text) for _, line_text in current)
+            current = _overlap_lines(current, overlap_tokens, line_token_counts)
+            current_tokens = sum(line_token_counts[ln] for ln, _ in current)
         current.append((line_number, line))
         current_tokens += line_tokens
 
@@ -60,14 +65,18 @@ def _line_groups(lines: list[str], max_tokens: int, overlap_tokens: int) -> list
     return groups
 
 
-def _overlap_lines(lines: list[tuple[int, str]], overlap_tokens: int) -> list[tuple[int, str]]:
+def _overlap_lines(
+    lines: list[tuple[int, str]],
+    overlap_tokens: int,
+    line_token_counts: list[int],
+) -> list[tuple[int, str]]:
     if overlap_tokens <= 0:
         return []
 
     selected: list[tuple[int, str]] = []
     selected_tokens = 0
     for line_number, line in reversed(lines):
-        line_tokens = estimate_tokens(line)
+        line_tokens = line_token_counts[line_number]
         if selected and selected_tokens + line_tokens > overlap_tokens:
             break
         selected.append((line_number, line))
