@@ -88,3 +88,31 @@ def test_tree_sitter_parse_error_metadata(tmp_path: Path) -> None:
     file_metadata_chunks = [chunk for chunk in chunks if chunk.metadata["chunk_type"] == "file_metadata"]
     assert file_metadata_chunks
     assert any(chunk.metadata["parse_error_lines"] for chunk in file_metadata_chunks)
+
+
+def test_oversized_method_chunks_are_split_into_parts(tmp_path: Path) -> None:
+    body_lines = [f"        value_{index} = {index}" for index in range(30)]
+    (tmp_path / "large.py").write_text(
+        "\n".join(["class LargeService:", "    def run(self):", *body_lines, "        return value_29"]),
+        encoding="utf-8",
+    )
+
+    chunks = create_chunks(
+        tmp_path,
+        Settings(max_chunk_tokens=40, chunk_overlap_tokens=8),
+    )
+
+    method_parts = [
+        chunk
+        for chunk in chunks
+        if chunk.metadata["chunk_type"] == "method"
+        and chunk.metadata["symbol"] == "LargeService.run"
+    ]
+
+    assert len(method_parts) > 1
+    assert all(chunk.metadata["is_chunk_part"] is True for chunk in method_parts)
+    assert [chunk.metadata["part_index"] for chunk in method_parts] == list(range(1, len(method_parts) + 1))
+    assert {chunk.metadata["part_count"] for chunk in method_parts} == {len(method_parts)}
+    assert len({chunk.metadata["parent_chunk_id"] for chunk in method_parts}) == 1
+    assert method_parts[0].metadata["start_line"] == 2
+    assert method_parts[-1].metadata["end_line"] == 33

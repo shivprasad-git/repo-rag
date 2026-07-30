@@ -22,6 +22,14 @@ class Settings:
         "markdown_section",
         "text_file",
     )
+    splittable_chunk_types: tuple[str, ...] = (
+        "function",
+        "method",
+        "markdown_section",
+        "text_file",
+    )
+    max_chunk_tokens: int = 700
+    chunk_overlap_tokens: int = 100
     ignored_dirs: tuple[str, ...] = (
         ".git",
         ".venv",

@@ -15,6 +15,7 @@ Current capabilities:
 - Create chunk objects with file, symbol, qualified symbol, signature, docstring, decorators, calls, test flags, parse errors, heading hierarchy, line, language, repo, and commit metadata.
 - Keep Python class chunks compact by storing class headers, docstrings, and class attributes separately from method chunks.
 - Normalize file-level metadata into `file_metadata` chunks so imports and parse error details are stored once per file instead of repeated on every chunk.
+- Split oversized functions, methods, Markdown sections, and text files into overlapping parts using a configurable token estimate.
 - Generate embeddings through a pluggable interface.
 - Store embeddings with minimal filter metadata in Chroma or a local JSON vector store.
 - Store full chunk content and full metadata separately in a JSON chunk document store.
@@ -136,6 +137,8 @@ Endpoints:
 Changing embedding models requires rebuilding the vector index, because each model produces vectors in its own vector space.
 
 Chunk storage and chunk retrieval are intentionally separate. Repo RAG stores metadata chunks, parse details, and searchable code/documentation chunks in the chunk document store, but only indexes configured searchable chunk types into the vector store. This keeps metadata available without adding noise to normal semantic search.
+
+Oversized chunks are split after parsing. By default, chunks over roughly `700` estimated tokens are split with `100` estimated tokens of overlap. Split parts keep the original `chunk_type` and add `is_chunk_part`, `part_index`, `part_count`, and `parent_chunk_id` metadata.
 
 ## Credits
 
