@@ -14,6 +14,8 @@ from app.retrieval.reranker import CrossEncoderMiniLMReranker, Reranker
 from app.retrieval.search import Retriever
 from app.vectorstore import build_vector_store
 
+EMBEDDING_BATCH_SIZE = 64
+
 
 def build_embedder(settings: Settings) -> EmbeddingProvider:
     return SentenceTransformerEmbeddingProvider(model_name=settings.embedding_model)
@@ -25,12 +27,28 @@ def build_reranker(settings: Settings) -> Reranker | None:
     return CrossEncoderMiniLMReranker(model_name=settings.reranker_model)
 
 
+def _embed_in_batches(embedder: EmbeddingProvider, texts: list[str], batch_size: int = EMBEDDING_BATCH_SIZE) -> list[list[float]]:
+    """Embed texts in fixed-size batches to bound peak memory usage.
+
+    ``embed_many`` on all texts at once can exhaust CPU/GPU memory for large
+    repositories; batching keeps the peak memory proportional to the batch
+    size rather than the whole corpus.
+    """
+    if batch_size <= 0:
+        return embedder.embed_many(texts)
+    embeddings: list[list[float]] = []
+    for start in range(0, len(texts), batch_size):
+        batch = texts[start : start + batch_size]
+        embeddings.extend(embedder.embed_many(batch))
+    return embeddings
+
+
 def index_repository(repo: str, store_kind: str, settings: Settings, index_name: str | None = None) -> tuple[Path, int]:
     repo_path = load_repository(repo, settings.repositories_dir)
     chunks = create_chunks(repo_path, settings)
     embedder = build_embedder(settings)
     vector_chunks = searchable_chunks(chunks, settings)
-    embeddings = embedder.embed_many([chunk.content for chunk in vector_chunks])
+    embeddings = _embed_in_batches(embedder, [chunk.content for chunk in vector_chunks])
     name = index_name or settings.collection_name
     chunk_store = build_chunk_store(settings.indexes_dir, name)
     vector_store = build_vector_store(store_kind, settings, index_name=index_name)

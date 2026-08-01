@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from hashlib import md5
+from pathlib import Path
 
 from app.embeddings import EmbeddingProvider
 from app.config import Settings
@@ -32,7 +32,8 @@ class Retriever:
         self.vector_weight = vector_weight
         self.keyword_weight = keyword_weight
         self._bm25_index: BM25KeywordIndex | None = None
-        self._bm25_chunk_hash: str = ""
+        self._bm25_source_mtime: float | None = None
+        self._bm25_source_path: Path | None = None
 
     def retrieve(
         self,
@@ -80,12 +81,28 @@ class Retriever:
         if filters is not None and filters.has_filters:
             return BM25KeywordIndex(self._all_full_chunks(filters))
 
-        chunks = self._all_full_chunks(filters=None)
-        chunk_hash = _chunk_hash(chunks)
-        if self._bm25_index is None or chunk_hash != self._bm25_chunk_hash:
+        if self._bm25_index is None or self._bm25_source_changed():
+            chunks = self._all_full_chunks(filters=None)
             self._bm25_index = BM25KeywordIndex(chunks)
-            self._bm25_chunk_hash = chunk_hash
+            self._bm25_source_path = _source_path(self.chunk_store, self.vector_store)
+            self._bm25_source_mtime = _source_mtime(self._bm25_source_path)
         return self._bm25_index
+
+    def _bm25_source_changed(self) -> bool:
+        """Return True when the underlying chunk source file changed on disk.
+
+        Uses the chunk store file mtime when available, falling back to the
+        vector store file.  This avoids re-loading and hashing every chunk on
+        each query just to detect a change.
+
+        When no on-disk source is available (e.g. a Chroma-only setup without
+        a chunk store), there is no file to watch, so the index is rebuilt on
+        every query to stay correct.
+        """
+        if self._bm25_source_path is None:
+            return True
+        mtime = _source_mtime(self._bm25_source_path)
+        return mtime != self._bm25_source_mtime
 
     def _all_full_chunks(self, filters: MetadataFilters | None) -> list[Chunk]:
         if self.chunk_store is not None:
@@ -137,9 +154,16 @@ class Retriever:
         return parts or [chunk]
 
 
-def _chunk_hash(chunks: list[Chunk]) -> str:
-    """Return a deterministic hash of chunk IDs for change detection."""
-    return md5("|".join(chunk.id for chunk in chunks).encode("utf-8")).hexdigest()
+def _source_path(chunk_store: SimpleJsonChunkStore | None, vector_store: VectorStore) -> Path | None:
+    """Return the on-disk source file that backs the BM25 corpus."""
+    if chunk_store is not None:
+        return chunk_store.path
+    path = getattr(vector_store, "path", None)
+    return path if isinstance(path, Path) else None
+
+
+def _source_mtime(path: Path | None) -> float | None:
+    return path.stat().st_mtime if path is not None and path.exists() else None
 
 
 def _normalize(matches: list[tuple[Chunk, float]]) -> list[tuple[Chunk, float]]:

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
-import math
 from pathlib import Path
+from typing import Any
 
 from app.models import Chunk
 from app.retrieval.filters import MetadataFilters, filter_chunks
@@ -13,6 +13,8 @@ class SimpleJsonVectorStore(VectorStore):
     def __init__(self, path: Path) -> None:
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._records: list[dict[str, Any]] | None = None
+        self._loaded_mtime: float | None = None
 
     def add(self, chunks: list[Chunk], embeddings: list[list[float]]) -> None:
         records = self._load_records()
@@ -24,6 +26,8 @@ class SimpleJsonVectorStore(VectorStore):
                 "embedding": embedding,
             }
         self.path.write_text(json.dumps(list(by_id.values()), indent=2), encoding="utf-8")
+        self._records = list(by_id.values())
+        self._loaded_mtime = self.path.stat().st_mtime
 
     def search(
         self,
@@ -31,11 +35,18 @@ class SimpleJsonVectorStore(VectorStore):
         top_k: int = 5,
         filters: MetadataFilters | None = None,
     ) -> list[tuple[Chunk, float]]:
+        records = self._filtered_records(filters)
+        if not records:
+            return []
+
+        query = _to_array(query_embedding)
+        matrix = _records_to_matrix(records)
+        scores = matrix @ query
+
         scored: list[tuple[Chunk, float]] = []
-        for record in self._filtered_records(filters):
-            score = _cosine_similarity(query_embedding, record["embedding"])
+        for record, score in zip(records, scores.tolist()):
             chunk = Chunk(id=record["id"], content="", metadata=record["metadata"])
-            scored.append((chunk, score))
+            scored.append((chunk, float(score)))
         return sorted(scored, key=lambda item: item[1], reverse=True)[:top_k]
 
     def all_chunks(self, filters: MetadataFilters | None = None) -> list[Chunk]:
@@ -45,15 +56,28 @@ class SimpleJsonVectorStore(VectorStore):
         ]
 
     def has_data(self) -> bool:
-        records = self._load_records()
-        return len(records) > 0
+        return bool(self._load_records())
 
-    def _load_records(self) -> list[dict]:
+    def _load_records(self) -> list[dict[str, Any]]:
+        """Load (or return cached) vector records.
+
+        The in-memory list is invalidated when the file mtime changes, so
+        repeated reads avoid re-parsing the JSON file on every call.
+        """
+        mtime = self.path.stat().st_mtime if self.path.exists() else None
+        if self._records is not None and mtime == self._loaded_mtime:
+            return self._records
+
         if not self.path.exists():
-            return []
-        return json.loads(self.path.read_text(encoding="utf-8"))
+            self._records = []
+            self._loaded_mtime = None
+            return self._records
 
-    def _filtered_records(self, filters: MetadataFilters | None) -> list[dict]:
+        self._records = json.loads(self.path.read_text(encoding="utf-8"))
+        self._loaded_mtime = mtime
+        return self._records
+
+    def _filtered_records(self, filters: MetadataFilters | None) -> list[dict[str, Any]]:
         records = self._load_records()
         if filters is None or not filters.has_filters:
             return records
@@ -65,10 +89,17 @@ class SimpleJsonVectorStore(VectorStore):
         return [record for record in records if record["id"] in matching_ids]
 
 
-def _cosine_similarity(left: list[float], right: list[float]) -> float:
-    dot = sum(a * b for a, b in zip(left, right))
-    left_norm = math.sqrt(sum(a * a for a in left))
-    right_norm = math.sqrt(sum(b * b for b in right))
-    if left_norm == 0 or right_norm == 0:
-        return 0.0
-    return dot / (left_norm * right_norm)
+def _to_array(embedding: list[float]) -> Any:
+    import numpy as np
+
+    return np.asarray(embedding, dtype=np.float32)
+
+
+def _records_to_matrix(records: list[dict[str, Any]]) -> Any:
+    import numpy as np
+
+    embeddings = [record["embedding"] for record in records]
+    matrix = np.asarray(embeddings, dtype=np.float32)
+    # Embeddings are L2-normalized at creation time in
+    # SentenceTransformerEmbeddingProvider, so cosine similarity == dot product.
+    return matrix
