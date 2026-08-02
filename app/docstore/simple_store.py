@@ -3,8 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from app.logging_config import get_logger
 from app.models import Chunk
 from app.retrieval.filters import MetadataFilters, filter_chunks
+
+logger = get_logger(__name__)
 
 
 class SimpleJsonChunkStore:
@@ -26,6 +29,7 @@ class SimpleJsonChunkStore:
         self.path.write_text(json.dumps(records, indent=2), encoding="utf-8")
         self._chunks = by_id
         self._loaded_mtime = self.path.stat().st_mtime
+        logger.debug("Wrote %d chunks to %s", len(records), self.path)
 
     def get(self, chunk_id: str) -> Chunk | None:
         return self._load_index().get(chunk_id)
@@ -59,6 +63,7 @@ class SimpleJsonChunkStore:
             for record in records
         }
         self._loaded_mtime = mtime
+        logger.debug("Loaded %d chunks from %s", len(self._chunks), self.path)
         return self._chunks
 
 

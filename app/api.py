@@ -4,12 +4,15 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from app.config import Settings
+from app.logging_config import get_logger, setup_logging
 from app.pipeline import index_repository, query_repository
 from app.retrieval.filters import MetadataFilters
 
+setup_logging()
 
 app = FastAPI(title="Repo RAG Phase 1")
 settings = Settings()
+logger = get_logger(__name__)
 
 
 class IndexRequest(BaseModel):
@@ -30,12 +33,15 @@ class QueryRequest(BaseModel):
 
 @app.post("/index")
 def index(request: IndexRequest) -> dict:
+    logger.info("POST /index repo=%s store=%s index=%s", request.repo, request.store, request.index_name)
     repo_path, chunk_count = index_repository(request.repo, request.store, settings, request.index_name)
+    logger.info("POST /index complete: %d chunks from %s", chunk_count, repo_path)
     return {"repo_path": str(repo_path), "chunks": chunk_count}
 
 
 @app.post("/query")
 def query(request: QueryRequest) -> dict:
+    logger.info("POST /query question=%r top_k=%d store=%s", request.question, request.top_k, request.store)
     filters = MetadataFilters(
         language=request.language,
         chunk_type=request.chunk_type,
@@ -49,6 +55,7 @@ def query(request: QueryRequest) -> dict:
         request.index_name,
         filters=filters if filters.has_filters else None,
     )
+    logger.info("POST /query returned %d matches", len(matches))
     return {
         "matches": [
             {"score": score, "content": chunk.content, "metadata": chunk.metadata}

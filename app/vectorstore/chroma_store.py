@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app.logging_config import get_logger
 from app.models import Chunk
 from app.retrieval.filters import MetadataFilters, filter_chunks
 from app.vectorstore.base import VectorStore, minimal_vector_metadata
+
+logger = get_logger(__name__)
 
 
 class ChromaVectorStore(VectorStore):
@@ -17,6 +20,7 @@ class ChromaVectorStore(VectorStore):
         persist_dir.mkdir(parents=True, exist_ok=True)
         self.client = chromadb.PersistentClient(path=str(persist_dir))
         self.collection = self.client.get_or_create_collection(collection_name)
+        logger.debug("Connected to Chroma collection %s at %s", collection_name, persist_dir)
 
     def add(self, chunks: list[Chunk], embeddings: list[list[float]]) -> None:
         if not chunks:
@@ -27,6 +31,7 @@ class ChromaVectorStore(VectorStore):
             documents=["" for _ in chunks],
             metadatas=[minimal_vector_metadata(chunk) for chunk in chunks],
         )
+        logger.debug("Upserted %d vectors into Chroma collection %s", len(chunks), self.collection.name)
 
     def search(
         self,

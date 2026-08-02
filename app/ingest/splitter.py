@@ -4,14 +4,29 @@ from dataclasses import replace
 
 from app.config import Settings
 from app.ingest.tokenizer import get_tokenizer, Tokenizer
+from app.logging_config import get_logger
 from app.models import Chunk
+
+logger = get_logger(__name__)
 
 
 def split_oversized_chunks(chunks: list[Chunk], settings: Settings) -> list[Chunk]:
     tokenizer = get_tokenizer(settings.embedding_model)
     split_chunks: list[Chunk] = []
+    split_count = 0
     for chunk in chunks:
-        split_chunks.extend(_split_chunk(chunk, settings, tokenizer))
+        parts = _split_chunk(chunk, settings, tokenizer)
+        if len(parts) > 1:
+            split_count += 1
+            logger.debug(
+                "Split %s (%s) into %d parts",
+                chunk.metadata.get("symbol", chunk.id),
+                chunk.metadata.get("chunk_type", "unknown"),
+                len(parts),
+            )
+        split_chunks.extend(parts)
+    if split_count:
+        logger.info("Split %d oversized chunks into %d total parts", split_count, len(split_chunks))
     return split_chunks
 
 

@@ -5,6 +5,7 @@ import json
 
 from app.config import Settings
 from app.llm import build_prompt
+from app.logging_config import setup_logging
 from app.pipeline import ask_repository, index_repository, query_repository
 from app.retrieval.filters import MetadataFilters
 
@@ -16,6 +17,7 @@ def main() -> None:
     parser.add_argument("--embedding-model", default=None)
     parser.add_argument("--reranker-model", default=None)
     parser.add_argument("--no-reranker", action="store_true", help="Disable MiniLM cross-encoder reranking")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug-level logging")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     index_parser = subparsers.add_parser("index", help="Index a GitHub URL or local repository")
@@ -37,6 +39,7 @@ def main() -> None:
     _add_filter_args(ask_parser)
 
     args = parser.parse_args()
+    setup_logging(level="DEBUG" if args.verbose else None)
     settings = _settings_from_args(args)
 
     if args.command == "index":

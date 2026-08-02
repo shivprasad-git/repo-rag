@@ -3,6 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.config import Settings
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 def discover_files(repo_path: Path, settings: Settings) -> list[Path]:
@@ -17,5 +20,6 @@ def discover_files(repo_path: Path, settings: Settings) -> list[Path]:
         if path.suffix.lower() in settings.supported_extensions:
             files.append(path)
 
+    logger.debug("Discovered %d files in %s (extensions=%s)", len(files), repo_path, settings.supported_extensions)
     return sorted(files)
 

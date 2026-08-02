@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+from app.logging_config import get_logger
 from app.models import Chunk
+
+logger = get_logger(__name__)
 
 
 class Reranker(ABC):
@@ -25,6 +28,7 @@ class CrossEncoderMiniLMReranker(Reranker):
 
         self.model_name = model_name
         self.model = CrossEncoder(model_name)
+        logger.debug("Loaded cross-encoder reranker %s", model_name)
 
     def rerank(
         self,
@@ -41,7 +45,9 @@ class CrossEncoderMiniLMReranker(Reranker):
             (chunk, float(score))
             for (chunk, _), score in zip(matches, scores)
         ]
-        return sorted(reranked, key=lambda item: item[1], reverse=True)[:top_k]
+        result = sorted(reranked, key=lambda item: item[1], reverse=True)[:top_k]
+        logger.debug("Reranked %d candidates -> %d results", len(matches), len(result))
+        return result
 
 
 def _rerank_text(chunk: Chunk) -> str:

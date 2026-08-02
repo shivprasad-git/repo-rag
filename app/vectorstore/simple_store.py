@@ -4,9 +4,12 @@ import json
 from pathlib import Path
 from typing import Any
 
+from app.logging_config import get_logger
 from app.models import Chunk
 from app.retrieval.filters import MetadataFilters, filter_chunks
 from app.vectorstore.base import VectorStore, minimal_vector_metadata
+
+logger = get_logger(__name__)
 
 
 class SimpleJsonVectorStore(VectorStore):
@@ -28,6 +31,7 @@ class SimpleJsonVectorStore(VectorStore):
         self.path.write_text(json.dumps(list(by_id.values()), indent=2), encoding="utf-8")
         self._records = list(by_id.values())
         self._loaded_mtime = self.path.stat().st_mtime
+        logger.debug("Wrote %d vector records to %s", len(self._records), self.path)
 
     def search(
         self,
@@ -37,6 +41,7 @@ class SimpleJsonVectorStore(VectorStore):
     ) -> list[tuple[Chunk, float]]:
         records = self._filtered_records(filters)
         if not records:
+            logger.debug("No vector records to search")
             return []
 
         query = _to_array(query_embedding)
@@ -47,7 +52,9 @@ class SimpleJsonVectorStore(VectorStore):
         for record, score in zip(records, scores.tolist()):
             chunk = Chunk(id=record["id"], content="", metadata=record["metadata"])
             scored.append((chunk, float(score)))
-        return sorted(scored, key=lambda item: item[1], reverse=True)[:top_k]
+        matches = sorted(scored, key=lambda item: item[1], reverse=True)[:top_k]
+        logger.debug("Vector search over %d records returned %d matches", len(records), len(matches))
+        return matches
 
     def all_chunks(self, filters: MetadataFilters | None = None) -> list[Chunk]:
         return [
@@ -75,6 +82,7 @@ class SimpleJsonVectorStore(VectorStore):
 
         self._records = json.loads(self.path.read_text(encoding="utf-8"))
         self._loaded_mtime = mtime
+        logger.debug("Loaded %d vector records from %s", len(self._records), self.path)
         return self._records
 
     def _filtered_records(self, filters: MetadataFilters | None) -> list[dict[str, Any]]:

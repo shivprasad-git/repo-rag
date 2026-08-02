@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from app.embeddings.base import EmbeddingProvider
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class SentenceTransformerEmbeddingProvider(EmbeddingProvider):
@@ -20,6 +23,7 @@ class SentenceTransformerEmbeddingProvider(EmbeddingProvider):
             self._dimensions = int(self.model.get_embedding_dimension())
         else:
             self._dimensions = int(self.model.get_sentence_embedding_dimension())
+        logger.debug("Loaded embedding model %s (dimensions=%d)", model_name, self._dimensions)
 
     @property
     def dimensions(self) -> int:
@@ -35,4 +39,5 @@ class SentenceTransformerEmbeddingProvider(EmbeddingProvider):
             normalize_embeddings=True,
             show_progress_bar=False,
         )
+        logger.debug("Embedded %d texts with %s", len(texts), self.model_name)
         return embeddings.astype(float).tolist()

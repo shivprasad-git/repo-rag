@@ -4,6 +4,7 @@ from pathlib import Path
 
 from app.embeddings import EmbeddingProvider
 from app.config import Settings
+from app.logging_config import get_logger
 from app.models import Chunk
 from app.docstore.simple_store import SimpleJsonChunkStore
 from app.ingest.searchable import searchable_chunks
@@ -11,6 +12,8 @@ from app.retrieval.filters import MetadataFilters
 from app.retrieval.keyword import BM25KeywordIndex
 from app.retrieval.reranker import Reranker
 from app.vectorstore.base import VectorStore
+
+logger = get_logger(__name__)
 
 
 class Retriever:
@@ -56,6 +59,12 @@ class Retriever:
             question,
             top_k=candidate_count,
         )
+        logger.debug(
+            "Hybrid retrieval: %d vector matches, %d keyword matches (candidate_count=%d)",
+            len(vector_matches),
+            len(keyword_matches),
+            candidate_count,
+        )
 
         merged: dict[str, tuple[Chunk, float]] = {}
         for chunk, score in _normalize(vector_matches):
@@ -65,10 +74,13 @@ class Retriever:
 
         candidates = sorted(merged.values(), key=lambda item: item[1], reverse=True)
         if self.reranker is not None:
+            logger.debug("Reranking %d candidates with %s", len(candidates), type(self.reranker).__name__)
             matches = self.reranker.rerank(question, candidates, top_k=top_k)
         else:
             matches = candidates[:top_k]
-        return self._expand_context_parts(matches)
+        expanded = self._expand_context_parts(matches)
+        logger.debug("Returning %d matches (top_k=%d)", len(expanded), top_k)
+        return expanded
 
     def _get_bm25_index(self, filters: MetadataFilters | None = None) -> BM25KeywordIndex:
         """Return a cached BM25 index, rebuilding only when chunks change.
