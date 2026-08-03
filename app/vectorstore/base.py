@@ -12,6 +12,10 @@ class VectorStore(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def delete(self, chunk_ids: list[str]) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
     def search(
         self,
         query_embedding: list[float],

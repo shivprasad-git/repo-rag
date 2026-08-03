@@ -21,15 +21,19 @@ class SimpleJsonChunkStore:
         by_id = {chunk.id: chunk for chunk in self.all_chunks()}
         for chunk in chunks:
             by_id[chunk.id] = chunk
+        self._write_chunks(by_id)
 
-        records = [
-            {"id": chunk.id, "content": chunk.content, "metadata": chunk.metadata}
-            for chunk in by_id.values()
-        ]
-        self.path.write_text(json.dumps(records, indent=2), encoding="utf-8")
-        self._chunks = by_id
-        self._loaded_mtime = self.path.stat().st_mtime
-        logger.debug("Wrote %d chunks to %s", len(records), self.path)
+    def delete(self, chunk_ids: list[str]) -> None:
+        if not chunk_ids:
+            return
+        ids = set(chunk_ids)
+        by_id = {
+            chunk_id: chunk
+            for chunk_id, chunk in self._load_index().items()
+            if chunk_id not in ids
+        }
+        self._write_chunks(by_id)
+        logger.debug("Deleted %d chunks from %s", len(ids), self.path)
 
     def get(self, chunk_id: str) -> Chunk | None:
         return self._load_index().get(chunk_id)
@@ -65,6 +69,16 @@ class SimpleJsonChunkStore:
         self._loaded_mtime = mtime
         logger.debug("Loaded %d chunks from %s", len(self._chunks), self.path)
         return self._chunks
+
+    def _write_chunks(self, chunks_by_id: dict[str, Chunk]) -> None:
+        records = [
+            {"id": chunk.id, "content": chunk.content, "metadata": chunk.metadata}
+            for chunk in chunks_by_id.values()
+        ]
+        self.path.write_text(json.dumps(records, indent=2), encoding="utf-8")
+        self._chunks = chunks_by_id
+        self._loaded_mtime = self.path.stat().st_mtime
+        logger.debug("Wrote %d chunks to %s", len(records), self.path)
 
 
 def build_chunk_store(indexes_dir: Path, index_name: str) -> SimpleJsonChunkStore:

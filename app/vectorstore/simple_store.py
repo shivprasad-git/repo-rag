@@ -33,6 +33,16 @@ class SimpleJsonVectorStore(VectorStore):
         self._loaded_mtime = self.path.stat().st_mtime
         logger.debug("Wrote %d vector records to %s", len(self._records), self.path)
 
+    def delete(self, chunk_ids: list[str]) -> None:
+        if not chunk_ids:
+            return
+        ids = set(chunk_ids)
+        records = [record for record in self._load_records() if record["id"] not in ids]
+        self.path.write_text(json.dumps(records, indent=2), encoding="utf-8")
+        self._records = records
+        self._loaded_mtime = self.path.stat().st_mtime
+        logger.debug("Deleted %d vector records from %s", len(ids), self.path)
+
     def search(
         self,
         query_embedding: list[float],

@@ -33,6 +33,12 @@ class ChromaVectorStore(VectorStore):
         )
         logger.debug("Upserted %d vectors into Chroma collection %s", len(chunks), self.collection.name)
 
+    def delete(self, chunk_ids: list[str]) -> None:
+        if not chunk_ids:
+            return
+        self.collection.delete(ids=chunk_ids)
+        logger.debug("Deleted %d vectors from Chroma collection %s", len(chunk_ids), self.collection.name)
+
     def search(
         self,
         query_embedding: list[float],

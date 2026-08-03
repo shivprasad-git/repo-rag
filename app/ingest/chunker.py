@@ -18,6 +18,17 @@ def create_chunks(repo_path: Path, settings: Settings) -> list[Chunk]:
     logger.info("Parsing repository at %s (commit=%s)", repo_path, commit or "unknown")
     files = discover_files(repo_path, settings)
     logger.info("Discovered %d supported files", len(files))
+    return create_chunks_for_files(repo_path, settings, files, commit=commit)
+
+
+def create_chunks_for_files(
+    repo_path: Path,
+    settings: Settings,
+    files: list[Path],
+    commit: str | None = None,
+) -> list[Chunk]:
+    if commit is None:
+        commit = current_commit(repo_path)
 
     chunks: list[Chunk] = []
     for file_path in files:
