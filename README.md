@@ -23,6 +23,7 @@ Current capabilities:
 - Embed only searchable code/documentation chunks by default; keep file metadata chunks in the document store without adding them to normal semantic retrieval.
 - Retrieve top-k chunks for a user question with hybrid vector + keyword search.
 - Rerank retrieved candidates with a MiniLM cross-encoder.
+- Enforce a prompt context token budget so expanded retrieval context cannot grow unbounded.
 - Build an LLM-ready prompt from retrieved repository context.
 
 ## Setup
@@ -144,6 +145,8 @@ Chunk storage and chunk retrieval are intentionally separate. Repo RAG stores me
 Oversized chunks are split after parsing. By default, chunks over `700` tokens (including special tokens) are split with `100` tokens of overlap. Token counts come from the embedding model's actual tokenizer (``sentence-transformers/all-MiniLM-L6-v2`` WordPiece tokenizer), so they match what the model will see during embedding. Split parts keep the original ``chunk_type`` and add ``is_chunk_part``, ``part_index``, ``part_count``, and ``parent_chunk_id`` metadata.
 
 When retrieval returns a split chunk part, Repo RAG includes one neighboring part on each side by default. This keeps retrieval precise while giving the final prompt enough nearby context.
+
+Prompt construction enforces a `3000` token context budget by default. Direct retrieved matches are prioritized over neighboring context, and omitted chunks are noted in the prompt.
 
 Chunk type names are centralized in `ChunkType`. Current values are `class`, `file_metadata`, `function`, `imports`, `markdown_section`, `method`, `parse_error`, and `text_file`.
 

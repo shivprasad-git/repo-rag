@@ -55,7 +55,7 @@ def main() -> None:
             filters=_metadata_filters_from_args(args),
         )
         if args.prompt:
-            print(build_prompt(args.question, matches))
+            print(build_prompt(args.question, matches, settings=settings))
         elif args.json:
             print(_matches_as_json(matches))
         else:

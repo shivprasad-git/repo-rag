@@ -33,6 +33,7 @@ class Settings:
     max_chunk_tokens: int = 700
     chunk_overlap_tokens: int = 100
     context_window_parts: int = 1
+    max_prompt_context_tokens: int = 3000
     ignored_dirs: tuple[str, ...] = (
         ".git",
         ".venv",

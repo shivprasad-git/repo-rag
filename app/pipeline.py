@@ -175,4 +175,4 @@ def ask_repository(
         logger.info("Index %s is empty; indexing repository before answering", name)
         index_repository(repo, store_kind, settings, index_name=index_name)
     matches = query_repository(question, store_kind, settings, top_k, index_name=index_name, filters=filters)
-    return build_prompt(question, matches)
+    return build_prompt(question, matches, settings=settings)
