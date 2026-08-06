@@ -33,6 +33,23 @@ def test_metadata_filters_match_language_chunk_type_and_path() -> None:
     assert not MetadataFilters(path_prefix="docs").matches(chunk)
 
 
+def test_path_prefix_matches_on_segment_boundaries() -> None:
+    chunk = Chunk(
+        content="def login(): pass",
+        metadata={
+            "language": "python",
+            "chunk_type": "function",
+            "file_path": "app/auth.py",
+        },
+    )
+
+    assert MetadataFilters(path_prefix="app").matches(chunk)
+    assert MetadataFilters(path_prefix="app/auth.py").matches(chunk)
+    assert MetadataFilters(path_prefix="/app/").matches(chunk)
+    assert not MetadataFilters(path_prefix="appl").matches(chunk)
+    assert not MetadataFilters(path_prefix="app/auth").matches(chunk)
+
+
 def test_hybrid_retrieval_respects_metadata_filters(tmp_path) -> None:
     store = SimpleJsonVectorStore(tmp_path / "index.json")
     chunk_store = SimpleJsonChunkStore(tmp_path / "chunks.json")

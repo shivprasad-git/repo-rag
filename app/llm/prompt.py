@@ -67,14 +67,18 @@ def _priority_order(matches: list[tuple[Chunk, float]]) -> list[tuple[Chunk, flo
 def _context_block(index: int, chunk: Chunk, score: float) -> str:
     metadata = chunk.metadata
     location = f"{metadata.get('file_path')}:{metadata.get('start_line')}-{metadata.get('end_line')}"
-    return "\n".join(
+    lines = [
+        f"[Chunk {index}] score={score:.4f}",
+        f"Role: {'neighbor context' if metadata.get('is_context_expansion') else 'retrieved match'}",
+        f"Location: {location}",
+    ]
+    if metadata.get("symbol"):
+        lines.append(f"Symbol: {metadata.get('symbol')}")
+    lines.extend(
         [
-            f"[Chunk {index}] score={score:.4f}",
-            f"Role: {'neighbor context' if metadata.get('is_context_expansion') else 'retrieved match'}",
-            f"Location: {location}",
-            f"Symbol: {metadata.get('symbol')}",
             f"Type: {metadata.get('chunk_type')}",
             "Content:",
             chunk.content,
         ]
     )
+    return "\n".join(lines)

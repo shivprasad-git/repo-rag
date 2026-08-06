@@ -24,7 +24,9 @@ class MetadataFilters:
         if self.path_prefix:
             file_path = str(metadata.get("file_path", ""))
             normalized_prefix = self.path_prefix.strip("/")
-            if not file_path.startswith(normalized_prefix):
+            prefix_parts = [part for part in normalized_prefix.split("/") if part]
+            file_parts = [part for part in file_path.split("/") if part]
+            if file_parts[: len(prefix_parts)] != prefix_parts:
                 return False
         return True
 
