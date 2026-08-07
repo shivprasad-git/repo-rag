@@ -1,28 +1,25 @@
+"""Python source parser producing code chunks."""
+
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 
-from tree_sitter import Language, Node, Parser, Tree
-import tree_sitter_markdown
-import tree_sitter_python
+from tree_sitter import Node
 
+from app.ingest.parsers.common import (
+    PYTHON_LANGUAGE,
+    _base_metadata,
+    _chunk_id,
+    _decode,
+    _first_child_of_type,
+    _join_metadata_values,
+    _line_chunk,
+    _node_text,
+    _parse,
+    _parse_error_metadata,
+    _qualify_symbol,
+)
 from app.models import Chunk, ChunkType
-
-
-PYTHON_LANGUAGE = Language(tree_sitter_python.language())
-MARKDOWN_LANGUAGE = Language(tree_sitter_markdown.language())
-
-
-def parse_file(path: Path, repo_path: Path, commit: str | None = None) -> list[Chunk]:
-    suffix = path.suffix.lower()
-    if suffix == ".py":
-        return parse_python(path, repo_path, commit)
-    if suffix == ".md":
-        return parse_markdown(path, repo_path, commit)
-    if suffix == ".txt":
-        return parse_text(path, repo_path, commit)
-    return []
 
 
 def parse_python(path: Path, repo_path: Path, commit: str | None = None) -> list[Chunk]:
@@ -35,10 +32,10 @@ def parse_python(path: Path, repo_path: Path, commit: str | None = None) -> list
     chunks: list[Chunk] = []
     imports = _top_level_nodes(root, {"import_statement", "import_from_statement"})
     import_text = _join_metadata_values(_node_text(source, node) for node in imports)
-    parse_error_metadata = _parse_error_metadata(root)
+    error_metadata = _parse_error_metadata(root)
     file_metadata_id = _file_metadata_id(metadata)
-    python_metadata = metadata | _light_parse_error_metadata(parse_error_metadata) | {"file_metadata_id": file_metadata_id}
-    chunks.append(_file_metadata_chunk(metadata, file_metadata_id, import_text, parse_error_metadata))
+    python_metadata = metadata | _light_parse_error_metadata(error_metadata) | {"file_metadata_id": file_metadata_id}
+    chunks.append(_file_metadata_chunk(metadata, file_metadata_id, import_text, error_metadata))
     if imports:
         chunks.append(_import_chunk(source, imports, python_metadata))
 
@@ -64,70 +61,6 @@ def parse_python(path: Path, repo_path: Path, commit: str | None = None) -> list
 
     chunks.extend(_parse_error_chunks(lines, root, python_metadata))
     return chunks
-
-
-def parse_markdown(path: Path, repo_path: Path, commit: str | None = None) -> list[Chunk]:
-    source = path.read_bytes()
-    tree = _parse(source, MARKDOWN_LANGUAGE)
-    metadata = _base_metadata(path, repo_path, "markdown", commit) | _parse_error_metadata(tree.root_node)
-    lines = _decode(source).splitlines()
-    headings = _markdown_headings(tree, source)
-
-    if not headings and lines:
-        return [_line_chunk(lines, 0, len(lines) - 1, metadata, ChunkType.MARKDOWN_SECTION, "Document")]
-
-    chunks: list[Chunk] = []
-    heading_stack: list[tuple[int, str]] = []
-    for index, heading in enumerate(headings):
-        start = heading["line"]
-        end = headings[index + 1]["line"] - 1 if index + 1 < len(headings) else len(lines) - 1
-        level = heading["level"]
-        title = heading["title"]
-        heading_stack = [(parent_level, parent_title) for parent_level, parent_title in heading_stack if parent_level < level]
-        parent_headings = [parent_title for _, parent_title in heading_stack]
-        chunks.append(
-            _line_chunk(
-                lines,
-                start,
-                end,
-                metadata,
-                ChunkType.MARKDOWN_SECTION,
-                title,
-                {
-                    "heading": title,
-                    "heading_level": level,
-                    "parent_headings": " > ".join(parent_headings),
-                },
-            )
-        )
-        heading_stack.append((level, title))
-
-    return [chunk for chunk in chunks if chunk.content.strip()]
-
-
-def parse_text(path: Path, repo_path: Path, commit: str | None = None) -> list[Chunk]:
-    text = path.read_text(encoding="utf-8", errors="ignore")
-    metadata = _base_metadata(path, repo_path, "text", commit)
-    line_count = max(1, len(text.splitlines()))
-    return [
-        Chunk(
-            id=_chunk_id(metadata, ChunkType.TEXT_FILE, metadata["file_path"], 1, line_count),
-            content=text,
-            metadata=metadata
-            | {
-                "chunk_type": ChunkType.TEXT_FILE.value,
-                "symbol": metadata["file_path"],
-                "start_line": 1,
-                "end_line": line_count,
-            },
-        )
-    ] if text.strip() else []
-
-
-def _parse(source: bytes, language: Language) -> Tree:
-    parser = Parser()
-    parser.language = language
-    return parser.parse(source)
 
 
 def _top_level_nodes(root: Node, node_types: set[str]) -> list[Node]:
@@ -246,21 +179,21 @@ def _import_chunk(source: bytes, imports: list[Node], metadata: dict) -> Chunk:
     )
 
 
-def _file_metadata_chunk(metadata: dict, file_metadata_id: str, imports: str, parse_error_metadata: dict) -> Chunk:
+def _file_metadata_chunk(metadata: dict, file_metadata_id: str, imports: str, error_metadata: dict) -> Chunk:
     content_lines = [
         f"file: {metadata['file_path']}",
         f"module: {metadata.get('module', '')}",
     ]
     if imports:
         content_lines.extend(["imports:", imports])
-    if parse_error_metadata["parse_error_lines"]:
-        content_lines.append(f"parse_error_lines: {parse_error_metadata['parse_error_lines']}")
+    if error_metadata["parse_error_lines"]:
+        content_lines.append(f"parse_error_lines: {error_metadata['parse_error_lines']}")
 
     return Chunk(
         id=file_metadata_id,
         content="\n".join(content_lines),
         metadata=metadata
-        | parse_error_metadata
+        | error_metadata
         | {
             "chunk_type": ChunkType.FILE_METADATA.value,
             "symbol": metadata["file_path"],
@@ -294,30 +227,6 @@ def _node_chunk(
         chunk_type,
         symbol,
         _python_metadata(source, node, definition, metadata, symbol, extra) | (extra or {}),
-    )
-
-
-def _line_chunk(
-    lines: list[str],
-    start: int,
-    end: int,
-    metadata: dict,
-    chunk_type: ChunkType,
-    symbol: str,
-    extra: dict | None = None,
-) -> Chunk:
-    return Chunk(
-        id=_chunk_id(metadata, chunk_type, symbol, start + 1, end + 1),
-        content="\n".join(lines[start : end + 1]),
-        metadata=metadata
-        | {
-            "chunk_type": chunk_type.value,
-            "symbol": symbol,
-            "qualified_symbol": _qualify_symbol(metadata, symbol),
-            "start_line": start + 1,
-            "end_line": end + 1,
-        }
-        | (extra or {}),
     )
 
 
@@ -406,13 +315,6 @@ def _collect_call_names(source: bytes, node: Node, calls: set[str]) -> None:
         _collect_call_names(source, child, calls)
 
 
-def _first_child_of_type(node: Node, node_type: str) -> Node | None:
-    for child in node.children:
-        if child.type == node_type:
-            return child
-    return None
-
-
 def _contains_type(node: Node, node_types: set[str]) -> bool:
     if node.type in node_types:
         return True
@@ -427,61 +329,9 @@ def _strip_string_quotes(text: str) -> str:
     return stripped
 
 
-def _markdown_headings(tree: Tree, source: bytes) -> list[dict]:
-    headings: list[dict] = []
-    _collect_markdown_headings(tree.root_node, source, headings)
-    return sorted(headings, key=lambda heading: heading["line"])
-
-
-def _collect_markdown_headings(node: Node, source: bytes, headings: list[dict]) -> None:
-    if node.type == "atx_heading":
-        headings.append(
-            {
-                "line": node.start_point[0],
-                "level": _markdown_heading_level(node),
-                "title": _markdown_heading_title(source, node),
-            }
-        )
-    for child in node.children:
-        _collect_markdown_headings(child, source, headings)
-
-
-def _markdown_heading_level(node: Node) -> int:
-    for child in node.children:
-        if child.type.startswith("atx_h") and child.type.endswith("_marker"):
-            return int(child.type.removeprefix("atx_h").removesuffix("_marker"))
-    return 1
-
-
-def _markdown_heading_title(source: bytes, node: Node) -> str:
-    inline = _first_child_of_type(node, "inline")
-    if inline is None:
-        return "Section"
-    return _node_text(source, inline).strip() or "Section"
-
-
-def _base_metadata(path: Path, repo_path: Path, language: str, commit: str | None) -> dict:
-    relative = path.relative_to(repo_path)
+def _light_parse_error_metadata(error_metadata: dict) -> dict:
     return {
-        "file_path": str(relative),
-        "module": _module_name(relative) if language == "python" else "",
-        "language": language,
-        "commit": commit,
-    }
-
-
-def _parse_error_metadata(root: Node) -> dict:
-    error_lines: set[int] = set()
-    _collect_error_lines(root, error_lines)
-    return {
-        "has_parse_errors": root.has_error,
-        "parse_error_lines": ",".join(str(line) for line in sorted(error_lines)),
-    }
-
-
-def _light_parse_error_metadata(parse_error_metadata: dict) -> dict:
-    return {
-        "has_parse_errors": parse_error_metadata["has_parse_errors"],
+        "has_parse_errors": error_metadata["has_parse_errors"],
         "parse_error_lines": "",
     }
 
@@ -513,53 +363,7 @@ def _collect_error_nodes(node: Node, error_nodes: list[Node]) -> None:
         _collect_error_nodes(child, error_nodes)
 
 
-def _collect_error_lines(node: Node, error_lines: set[int]) -> None:
-    if node.type == "ERROR" or node.is_missing:
-        error_lines.add(node.start_point[0] + 1)
-    for child in node.children:
-        _collect_error_lines(child, error_lines)
-
-
-def _module_name(relative_path: Path) -> str:
-    without_suffix = relative_path.with_suffix("")
-    parts = list(without_suffix.parts)
-    if parts and parts[-1] == "__init__":
-        parts = parts[:-1]
-    return ".".join(parts)
-
-
-def _qualify_symbol(metadata: dict, symbol: str) -> str:
-    module = metadata.get("module")
-    return f"{module}.{symbol}" if module else symbol
-
-
 def _is_test(metadata: dict, symbol: str) -> bool:
     path = str(metadata.get("file_path", ""))
     name = symbol.rsplit(".", 1)[-1]
     return path.startswith("tests/") or "/tests/" in path or Path(path).name.startswith("test_") or name.startswith("test_")
-
-
-def _decode(source: bytes) -> str:
-    return source.decode("utf-8", errors="ignore")
-
-
-def _node_text(source: bytes, node: Node) -> str:
-    return _decode(source[node.start_byte : node.end_byte])
-
-
-def _join_metadata_values(values) -> str:
-    return "\n".join(value for value in values if value)
-
-
-def _chunk_id(metadata: dict, chunk_type: ChunkType, symbol: str, start_line: int, end_line: int) -> str:
-    raw = "|".join(
-        [
-            str(metadata.get("commit")),
-            str(metadata.get("file_path")),
-            chunk_type.value,
-            symbol,
-            str(start_line),
-            str(end_line),
-        ]
-    )
-    return hashlib.sha1(raw.encode("utf-8")).hexdigest()
