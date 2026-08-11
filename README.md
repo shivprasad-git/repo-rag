@@ -4,28 +4,46 @@
   <img src="assets/logo.svg" alt="Repo RAG logo" width="720">
 </p>
 
-Repo RAG is a Phase 1 retrieval-augmented generation MVP for GitHub repositories.
+Repo RAG is a GitHub repository retrieval-augmented generation MVP. It indexes a codebase into structured chunks, retrieves the most relevant code and documentation for a question, and builds an LLM-ready prompt with source locations.
 
-Current capabilities:
+The project focuses on the backend RAG pipeline: parsing, chunking, embeddings, vector search, reranking, incremental indexing, and prompt construction.
 
-- Clone a GitHub repository or load a local repo.
-- Discover `.py`, `.md`, and `.txt` files.
+## What It Does
+
+- Clone a GitHub repository or load a local repository.
+- Discover supported files: `.py`, `.md`, and `.txt`.
 - Parse Python and Markdown with Tree-sitter.
-- Split Markdown by headings.
-- Create chunk objects with file, symbol, qualified symbol, signature, docstring, decorators, calls, test flags, parse errors, heading hierarchy, line, language, repo, and commit metadata.
-- Keep Python class chunks compact by storing class headers, docstrings, and class attributes separately from method chunks.
-- Normalize file-level metadata into `file_metadata` chunks so imports and parse error details are stored once per file instead of repeated on every chunk.
-- Split oversized functions, methods, Markdown sections, and text files into overlapping parts using the embedding model's actual tokenizer.
-- Generate embeddings through a pluggable interface.
-- Store embeddings with minimal filter metadata in Chroma or a local JSON vector store.
-- Store full chunk content and full metadata separately in a JSON chunk document store.
-- Re-index incrementally by hashing files and updating only changed or deleted files.
-- Check index health across the manifest, document store, and vector store.
-- Embed only searchable code/documentation chunks by default; keep file metadata chunks in the document store without adding them to normal semantic retrieval.
-- Retrieve top-k chunks for a user question with hybrid vector + keyword search.
-- Rerank retrieved candidates with a MiniLM cross-encoder.
-- Enforce a prompt context token budget so expanded retrieval context cannot grow unbounded.
-- Build an LLM-ready prompt from retrieved repository context.
+- Create structured chunks for files, classes, functions, methods, Markdown sections, text files, imports, and parse errors.
+- Split oversized chunks with the embedding model's tokenizer.
+- Generate semantic embeddings with `sentence-transformers`.
+- Store vectors in Chroma or a local JSON vector store.
+- Store full chunk content and metadata separately in a JSON document store.
+- Retrieve with hybrid vector + keyword search.
+- Rerank candidates with a MiniLM cross-encoder.
+- Expand split chunk matches with neighboring parts.
+- Enforce a prompt context token budget.
+- Re-index incrementally using file hashes.
+- Check index health across manifest, document store, and vector store.
+
+## Architecture
+
+```text
+Repository
+  -> file discovery
+  -> Tree-sitter parsing
+  -> chunk creation
+  -> oversized chunk splitting
+  -> searchable chunk filtering
+  -> embeddings
+  -> vector store + document store
+  -> hybrid retrieval
+  -> reranking
+  -> neighbor context expansion
+  -> prompt token budgeting
+  -> LLM-ready prompt
+```
+
+The vector store only keeps embeddings and minimal filter metadata. The document store keeps full chunk content and full metadata. Retrieval first finds chunk IDs, then hydrates the full chunks before building the prompt.
 
 ## Setup
 
@@ -40,16 +58,22 @@ pip install -r requirements.txt
 Using Chroma:
 
 ```bash
-python3 -m app.cli --store chroma index --repo https://github.com/pallets/flask
+python3 -m app.cli --store chroma --index-name flask index \
+  --repo https://github.com/pallets/flask
 ```
 
-Using the offline JSON store:
+Using the local JSON vector store:
 
 ```bash
-python3 -m app.cli --store simple --index-name flask index --repo /path/to/local/repo
+python3 -m app.cli --store simple --index-name flask index \
+  --repo /path/to/local/repo
 ```
 
-## Query Indexed Chunks
+Indexing is incremental. Re-running `index` skips unchanged files, replaces changed files, and removes deleted files from the index.
+
+## Query
+
+Retrieve matching chunks:
 
 ```bash
 python3 -m app.cli --store simple --index-name flask query \
@@ -57,7 +81,23 @@ python3 -m app.cli --store simple --index-name flask query \
   --top-k 5
 ```
 
-Narrow retrieval with metadata filters:
+Show chunk content previews:
+
+```bash
+python3 -m app.cli --store simple --index-name flask query \
+  --question "Where is login implemented?" \
+  --show-content
+```
+
+Print JSON results:
+
+```bash
+python3 -m app.cli --store simple --index-name flask query \
+  --question "How is routing implemented?" \
+  --json
+```
+
+Filter by metadata:
 
 ```bash
 python3 -m app.cli --store simple --index-name flask query \
@@ -67,7 +107,7 @@ python3 -m app.cli --store simple --index-name flask query \
   --path app
 ```
 
-Print an LLM-ready prompt instead of raw matches:
+Print an LLM-ready prompt:
 
 ```bash
 python3 -m app.cli --store simple --index-name flask query \
@@ -75,17 +115,49 @@ python3 -m app.cli --store simple --index-name flask query \
   --prompt
 ```
 
-## Embeddings
+## Ask
 
-The default embedding provider is `sentence-transformers` with:
+`ask` ensures the index exists, retrieves relevant chunks, and prints the prompt to send to an LLM.
+
+```bash
+python3 -m app.cli --store simple --index-name sample ask \
+  --repo /path/to/local/repo \
+  --question "How does login work?" \
+  --top-k 3
+```
+
+## Index Health
+
+Check consistency between the manifest, document store, and vector store:
+
+```bash
+python3 -m app.cli --store simple --index-name flask health
+```
+
+Include `--repo` to compare manifest hashes against current files:
+
+```bash
+python3 -m app.cli --store simple --index-name flask health \
+  --repo /path/to/local/repo
+```
+
+The health check reports missing document chunks, doc chunks missing from the manifest, missing vectors, orphan vectors, embedding dimension mismatches for the JSON vector store, config mismatches, and stale file hashes.
+
+## Models
+
+Default embedding model:
 
 ```text
 sentence-transformers/all-MiniLM-L6-v2
 ```
 
-This gives real semantic embeddings, so related phrases like `login`, `sign in`, and `authenticate` can land closer together.
+Default reranker:
 
-You can also override the embedding model:
+```text
+cross-encoder/ms-marco-MiniLM-L-6-v2
+```
+
+Override the embedding model:
 
 ```bash
 python3 -m app.cli --embedding-model sentence-transformers/all-MiniLM-L6-v2 \
@@ -94,47 +166,52 @@ python3 -m app.cli --embedding-model sentence-transformers/all-MiniLM-L6-v2 \
   query --question "How does login work?"
 ```
 
-## Reranking
-
-Retrieval uses hybrid vector + keyword search to gather candidates, then reranks them with:
-
-```text
-cross-encoder/ms-marco-MiniLM-L-6-v2
-```
-
-The reranker reads the question and each candidate chunk together, then returns a stronger relevance ordering for the final top-k results.
-
-Disable reranking when you want a faster local smoke test:
+Disable reranking:
 
 ```bash
 python3 -m app.cli --no-reranker --store simple --index-name sample query \
   --question "How does login work?"
 ```
 
-## End-To-End Ask
+Changing embedding models requires rebuilding the vector index because each model produces vectors in its own vector space.
 
-`ask` retrieves relevant chunks for a question and prints the prompt to send to an LLM. The first time you run `ask` for a given `--index-name`, it indexes the repository. Subsequent runs skip re-indexing and go straight to retrieval, making repeated queries fast.
+## Chunking
 
-```bash
-python3 -m app.cli --store simple --index-name smoke ask \
-  --repo work/sample_repo \
-  --question "How does login work?" \
-  --top-k 3
-```
+Python chunks are syntax-aware:
 
-To force a fresh index, delete the existing index files or run the `index` command explicitly.
+- `file_metadata`
+- `imports`
+- `class`
+- `method`
+- `function`
+- `parse_error`
 
-## Index Health Check
+Markdown is split by headings into `markdown_section` chunks. Plain text files become `text_file` chunks.
 
-```bash
-python3 -m app.cli --store simple --index-name flask health
-```
+Python class chunks are compact: class signature, docstring, and class attributes are stored separately from method bodies. This avoids duplicating method content across class and method chunks.
 
-Include `--repo` to also compare manifest file hashes against the current repository files:
+Oversized functions, methods, Markdown sections, and text files are split after parsing. By default, chunks over `700` tokens are split with `100` tokens of overlap. Token counts come from the embedding model tokenizer, so the split budget reflects what the embedding model actually sees.
 
-```bash
-python3 -m app.cli --store simple --index-name flask health --repo /path/to/local/repo
-```
+Split parts keep the original `chunk_type` and add:
+
+- `is_chunk_part`
+- `part_index`
+- `part_count`
+- `parent_chunk_id`
+
+## Retrieval
+
+Retrieval combines:
+
+- vector similarity,
+- BM25 keyword search,
+- metadata filtering,
+- MiniLM reranking,
+- neighbor expansion for split chunks.
+
+Searchable chunks are indexed into the vector store. File metadata and parse details remain available in the document store without polluting normal semantic retrieval.
+
+When retrieval returns a split chunk part, Repo RAG includes one neighboring part on each side by default. Prompt construction then enforces a `3000` token context budget and prioritizes direct matches over neighbor context.
 
 ## Optional API
 
@@ -147,23 +224,16 @@ Endpoints:
 - `POST /index`
 - `POST /query`
 
-## Notes
+## Current Scope
 
-Changing embedding models requires rebuilding the vector index, because each model produces vectors in its own vector space.
+This is an MVP backend, not a production service. It does not yet include:
 
-Indexing is incremental. Repo RAG stores a manifest under `indexes/manifests/` with each file's content hash and chunk IDs. On the next `index` run, unchanged files are skipped, changed files replace their old chunks, and deleted files are removed from both the document store and vector store. If indexing settings that affect embeddings or chunking change, the index is rebuilt.
-
-The `health` command reports missing document chunks, stale manifest entries, missing vectors, orphan vectors, embedding dimension mismatches for the JSON vector store, config mismatches, and optional stale file hashes.
-
-Chunk storage and chunk retrieval are intentionally separate. Repo RAG stores metadata chunks, parse details, and searchable code/documentation chunks in the chunk document store, but only indexes configured searchable chunk types into the vector store. This keeps metadata available without adding noise to normal semantic search.
-
-Oversized chunks are split after parsing. By default, chunks over `700` tokens (including special tokens) are split with `100` tokens of overlap. Token counts come from the embedding model's actual tokenizer (``sentence-transformers/all-MiniLM-L6-v2`` WordPiece tokenizer), so they match what the model will see during embedding. Split parts keep the original ``chunk_type`` and add ``is_chunk_part``, ``part_index``, ``part_count``, and ``parent_chunk_id`` metadata.
-
-When retrieval returns a split chunk part, Repo RAG includes one neighboring part on each side by default. This keeps retrieval precise while giving the final prompt enough nearby context.
-
-Prompt construction enforces a `3000` token context budget by default. Direct retrieved matches are prioritized over neighboring context, and omitted chunks are noted in the prompt.
-
-Chunk type names are centralized in `ChunkType`. Current values are `class`, `file_metadata`, `function`, `imports`, `markdown_section`, `method`, `parse_error`, and `text_file`.
+- a full UI,
+- authentication,
+- background workers,
+- multi-user project management,
+- large-scale evaluation metrics,
+- broad language support beyond the current parser set.
 
 ## Credits
 
@@ -172,3 +242,5 @@ Chunk type names are centralized in `ChunkType`. Current values are `class`, `fi
   &nbsp;&nbsp;
   <img src="assets/deepseek-color.svg" alt="DeepSeek logo" width="42">
 </p>
+
+Built with help from Codex and DeepSeek.
