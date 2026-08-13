@@ -53,6 +53,26 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+## Quick Start
+
+For a local repository, the shortest path is:
+
+```bash
+python3 -m app.cli --store simple --index-name sample index \
+  --repo /path/to/local/repo
+
+python3 -m app.cli --store simple --index-name sample query \
+  --question "Where is authentication implemented?" \
+  --show-content
+```
+
+Use `--verbose` when you want indexing and retrieval logs:
+
+```bash
+python3 -m app.cli --verbose --store simple --index-name sample query \
+  --question "How does login work?"
+```
+
 ## Index A Repository
 
 Using Chroma:
