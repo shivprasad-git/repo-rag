@@ -148,6 +148,12 @@ python3 -m app.cli --store simple --index-name sample ask \
 
 ## Index Health
 
+Summarize index settings and counts:
+
+```bash
+python3 -m app.cli --store simple --index-name flask info
+```
+
 Check consistency between the manifest, document store, and vector store:
 
 ```bash

@@ -4,7 +4,7 @@ import argparse
 import json
 
 from app.config import Settings
-from app.indexing import check_index_health, format_health_report
+from app.indexing import check_index_health, format_health_report, format_index_info, get_index_info
 from app.llm import build_prompt
 from app.logging_config import setup_logging
 from app.pipeline import ask_repository, index_repository, query_repository
@@ -41,6 +41,8 @@ def main() -> None:
 
     health_parser = subparsers.add_parser("health", help="Check index/document/vector store consistency")
     health_parser.add_argument("--repo", help="Optional local or GitHub repo to check manifest file hashes against")
+
+    subparsers.add_parser("info", help="Show index settings and store counts")
 
     args = parser.parse_args()
     setup_logging(level="DEBUG" if args.verbose else None)
@@ -79,6 +81,9 @@ def main() -> None:
     elif args.command == "health":
         report = check_index_health(args.store, settings, args.index_name, repo=args.repo)
         print(format_health_report(report))
+    elif args.command == "info":
+        info = get_index_info(args.store, settings, args.index_name)
+        print(format_index_info(info))
 
 
 def _add_filter_args(parser: argparse.ArgumentParser) -> None:
