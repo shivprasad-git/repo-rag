@@ -31,6 +31,7 @@ def main() -> None:
     query_parser.add_argument("--json", action="store_true", help="Print retrieved chunks as JSON")
     query_parser.add_argument("--show-content", action="store_true", help="Print a content preview for each match")
     query_parser.add_argument("--content-chars", type=int, default=700, help="Maximum preview characters per match")
+    query_parser.add_argument("--debug-scores", action="store_true", help="Show vector, keyword, combined, and reranker scores")
     _add_filter_args(query_parser)
 
     ask_parser = subparsers.add_parser("ask", help="Index a repository and print an LLM-ready prompt")
@@ -59,13 +60,19 @@ def main() -> None:
             args.top_k,
             args.index_name,
             filters=_metadata_filters_from_args(args),
+            debug_scores=args.debug_scores,
         )
         if args.prompt:
             print(build_prompt(args.question, matches, settings=settings))
         elif args.json:
             print(_matches_as_json(matches))
         else:
-            _print_matches(matches, show_content=args.show_content, content_chars=args.content_chars)
+            _print_matches(
+                matches,
+                show_content=args.show_content,
+                content_chars=args.content_chars,
+                debug_scores=args.debug_scores,
+            )
     elif args.command == "ask":
         print(
             ask_repository(
@@ -112,11 +119,13 @@ def _metadata_filters_from_args(args: argparse.Namespace) -> MetadataFilters | N
     return filters if filters.has_filters else None
 
 
-def _print_matches(matches, show_content: bool = False, content_chars: int = 700) -> None:
+def _print_matches(matches, show_content: bool = False, content_chars: int = 700, debug_scores: bool = False) -> None:
     for index, (chunk, score) in enumerate(matches, start=1):
         metadata = chunk.metadata
         print(f"{index}. score={score:.4f} {metadata.get('file_path')}:{metadata.get('start_line')}-{metadata.get('end_line')}")
         print(f"   {metadata.get('chunk_type')} {metadata.get('symbol')}")
+        if debug_scores:
+            print(_debug_score_line(metadata))
         if show_content:
             print(_preview_content(chunk.content, content_chars))
 
@@ -129,6 +138,17 @@ def _preview_content(content: str, max_chars: int) -> str:
         preview = f"{preview[:max_chars].rstrip()}..."
     indented = "\n".join(f"   | {line}" for line in preview.splitlines())
     return indented or "   |"
+
+
+def _debug_score_line(metadata: dict) -> str:
+    scores = [
+        f"vector={float(metadata.get('debug_vector_score', 0.0)):.4f}",
+        f"keyword={float(metadata.get('debug_keyword_score', 0.0)):.4f}",
+        f"combined={float(metadata.get('debug_combined_score', 0.0)):.4f}",
+    ]
+    if "debug_reranker_score" in metadata:
+        scores.append(f"reranker={float(metadata.get('debug_reranker_score', 0.0)):.4f}")
+    return f"   debug: {' '.join(scores)}"
 
 
 def _matches_as_json(matches) -> str:

@@ -109,6 +109,14 @@ python3 -m app.cli --store simple --index-name flask query \
   --show-content
 ```
 
+Show retrieval score details:
+
+```bash
+python3 -m app.cli --store simple --index-name flask query \
+  --question "Where is login implemented?" \
+  --debug-scores
+```
+
 Print JSON results:
 
 ```bash

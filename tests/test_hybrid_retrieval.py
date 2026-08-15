@@ -106,6 +106,56 @@ def test_retriever_applies_reranker(tmp_path) -> None:
     assert matches[0][1] == 10.0
 
 
+def test_retriever_adds_debug_scores_when_requested(tmp_path) -> None:
+    store = SimpleJsonVectorStore(tmp_path / "index.json")
+    chunk_store = SimpleJsonChunkStore(tmp_path / "chunks.json")
+    chunk = Chunk(
+        id="auth-login",
+        content="def login_user(): pass",
+        metadata={"chunk_type": "function"},
+    )
+    embedder = TestEmbeddingProvider()
+    chunk_store.add([chunk])
+    store.add([chunk], embedder.embed_many([chunk.content]))
+
+    matches = Retriever(embedder, store, settings=Settings(), chunk_store=chunk_store).retrieve(
+        "login_user",
+        top_k=1,
+        debug_scores=True,
+    )
+
+    metadata = matches[0][0].metadata
+    assert metadata["debug_vector_score"] == 1.0
+    assert metadata["debug_keyword_score"] == 1.0
+    assert metadata["debug_combined_score"] == 1.0
+    assert "debug_reranker_score" not in metadata
+
+
+def test_retriever_adds_reranker_debug_score_when_reranked(tmp_path) -> None:
+    store = SimpleJsonVectorStore(tmp_path / "index.json")
+    chunk_store = SimpleJsonChunkStore(tmp_path / "chunks.json")
+    chunks = [
+        Chunk(id="auth-login", content="def login_user(): pass", metadata={"chunk_type": "function"}),
+        Chunk(id="billing", content="def charge_card(): pass", metadata={"chunk_type": "function"}),
+    ]
+    embedder = TestEmbeddingProvider()
+    chunk_store.add(chunks)
+    store.add(chunks, embedder.embed_many([chunk.content for chunk in chunks]))
+
+    matches = Retriever(
+        embedder,
+        store,
+        settings=Settings(),
+        chunk_store=chunk_store,
+        reranker=PreferBillingReranker(),
+    ).retrieve("login_user", top_k=1, debug_scores=True)
+
+    metadata = matches[0][0].metadata
+    assert matches[0][0].id == "billing"
+    assert metadata["debug_reranker_score"] == 10.0
+    assert "debug_combined_score" in metadata
+
+
 def test_retriever_expands_neighboring_chunk_parts(tmp_path) -> None:
     store = SimpleJsonVectorStore(tmp_path / "index.json")
     chunk_store = SimpleJsonChunkStore(tmp_path / "chunks.json")

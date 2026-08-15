@@ -43,14 +43,16 @@ class Retriever:
         question: str,
         top_k: int = 5,
         filters: MetadataFilters | None = None,
+        debug_scores: bool = False,
     ) -> list[tuple[Chunk, float]]:
-        return self.retrieve_hybrid(question, top_k=top_k, filters=filters)
+        return self.retrieve_hybrid(question, top_k=top_k, filters=filters, debug_scores=debug_scores)
 
     def retrieve_hybrid(
         self,
         question: str,
         top_k: int = 5,
         filters: MetadataFilters | None = None,
+        debug_scores: bool = False,
     ) -> list[tuple[Chunk, float]]:
         query_embedding = self.embedder.embed(question)
         candidate_count = max(top_k * 4, 20)
@@ -66,16 +68,21 @@ class Retriever:
             candidate_count,
         )
 
-        merged: dict[str, tuple[Chunk, float]] = {}
+        merged: dict[str, tuple[Chunk, float, dict[str, float]]] = {}
         for chunk, score in _normalize(vector_matches):
-            _add_score(merged, self._hydrate(chunk), score * self.vector_weight)
+            _add_score(merged, self._hydrate(chunk), score * self.vector_weight, "vector", score)
         for chunk, score in _normalize(keyword_matches):
-            _add_score(merged, chunk, score * self.keyword_weight)
+            _add_score(merged, chunk, score * self.keyword_weight, "keyword", score)
 
-        candidates = sorted(merged.values(), key=lambda item: item[1], reverse=True)
+        candidates = [
+            (_with_debug_scores(chunk, score, scores) if debug_scores else chunk, score)
+            for chunk, score, scores in merged.values()
+        ]
+        candidates = sorted(candidates, key=lambda item: item[1], reverse=True)
         if self.reranker is not None:
             logger.debug("Reranking %d candidates with %s", len(candidates), type(self.reranker).__name__)
-            matches = self.reranker.rerank(question, candidates, top_k=top_k)
+            reranked = self.reranker.rerank(question, candidates, top_k=top_k)
+            matches = _with_reranker_debug_scores(reranked) if debug_scores else reranked
         else:
             matches = candidates[:top_k]
         expanded = self._expand_context_parts(matches)
@@ -187,12 +194,52 @@ def _normalize(matches: list[tuple[Chunk, float]]) -> list[tuple[Chunk, float]]:
     return [(chunk, score / max_score) for chunk, score in matches]
 
 
-def _add_score(merged: dict[str, tuple[Chunk, float]], chunk: Chunk, score: float) -> None:
+def _add_score(
+    merged: dict[str, tuple[Chunk, float, dict[str, float]]],
+    chunk: Chunk,
+    score: float,
+    source: str,
+    normalized_score: float,
+) -> None:
     existing = merged.get(chunk.id)
     if existing is None:
-        merged[chunk.id] = (chunk, score)
+        scores = {
+            "vector_score": 0.0,
+            "keyword_score": 0.0,
+        }
+        scores[f"{source}_score"] = normalized_score
+        merged[chunk.id] = (chunk, score, scores)
     else:
-        merged[chunk.id] = (existing[0], existing[1] + score)
+        scores = dict(existing[2])
+        scores[f"{source}_score"] = normalized_score
+        merged[chunk.id] = (existing[0], existing[1] + score, scores)
+
+
+def _with_debug_scores(chunk: Chunk, combined_score: float, scores: dict[str, float]) -> Chunk:
+    return Chunk(
+        id=chunk.id,
+        content=chunk.content,
+        metadata=chunk.metadata
+        | {
+            "debug_vector_score": scores.get("vector_score", 0.0),
+            "debug_keyword_score": scores.get("keyword_score", 0.0),
+            "debug_combined_score": combined_score,
+        },
+    )
+
+
+def _with_reranker_debug_scores(matches: list[tuple[Chunk, float]]) -> list[tuple[Chunk, float]]:
+    return [
+        (
+            Chunk(
+                id=chunk.id,
+                content=chunk.content,
+                metadata=chunk.metadata | {"debug_reranker_score": score},
+            ),
+            score,
+        )
+        for chunk, score in matches
+    ]
 
 
 def _context_expansion(chunk: Chunk, source_chunk_id: str) -> Chunk:

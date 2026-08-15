@@ -139,6 +139,7 @@ def query_repository(
     top_k: int,
     index_name: str | None = None,
     filters: MetadataFilters | None = None,
+    debug_scores: bool = False,
 ):
     start = time.monotonic()
     logger.info("Querying index %s (top_k=%d, store=%s)", index_name or settings.collection_name, top_k, store_kind)
@@ -154,6 +155,7 @@ def query_repository(
         question,
         top_k=top_k,
         filters=filters,
+        debug_scores=debug_scores,
     )
     logger.info("Retrieved %d matches in %.2fs", len(matches), time.monotonic() - start)
     return matches
