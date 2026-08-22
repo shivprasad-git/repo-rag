@@ -56,3 +56,27 @@ def test_index_health_reports_missing_vectors(tmp_path: Path) -> None:
 
     assert report.ok is False
     assert report.missing_vectors == ["auth-login"]
+
+
+def test_index_health_reports_wrong_embedding_dimensions(tmp_path: Path) -> None:
+    settings = Settings(indexes_dir=tmp_path / "indexes", embedding_dimensions=2)
+    index_name = "health"
+    chunk = Chunk(
+        id="auth-login",
+        content="def login():\n    return 'token'",
+        metadata={"file_path": "auth.py", "chunk_type": "function"},
+    )
+    chunk_store = build_chunk_store(settings.indexes_dir, index_name)
+    vector_store = build_vector_store("simple", settings, index_name=index_name)
+    chunk_store.add([chunk])
+    # Stored vectors have 3 dimensions but settings.embedding_dimensions is 2.
+    vector_store.add([chunk], [[1.0, 2.0, 3.0]])
+    manifest = IndexManifest.load(build_manifest_path(settings.indexes_dir, index_name))
+    manifest.config = index_config(settings, "simple")
+    manifest.replace_file("auth.py", "fake-hash", [chunk])
+    manifest.save()
+
+    report = check_index_health("simple", settings, index_name=index_name)
+
+    assert report.ok is False
+    assert report.wrong_embedding_dimensions == ["auth-login"]

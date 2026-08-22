@@ -10,6 +10,7 @@ from app.indexing.manifest import IndexManifest, build_manifest_path, file_conte
 from app.ingest.repository import load_repository
 from app.ingest.searchable import searchable_chunks
 from app.vectorstore import build_vector_store
+from app.vectorstore.base import VectorStore
 
 
 @dataclass(frozen=True)
@@ -81,7 +82,7 @@ def check_index_health(
         doc_chunks_missing_manifest=sorted(doc_ids - manifest_chunk_ids),
         missing_vectors=sorted(searchable_ids - vector_ids),
         orphan_vectors=sorted(vector_ids - doc_ids),
-        wrong_embedding_dimensions=_wrong_embedding_dimensions(store_kind, settings, name),
+        wrong_embedding_dimensions=_wrong_embedding_dimensions(vector_store, settings),
         stale_files=stale_files,
     )
 
@@ -137,15 +138,17 @@ def _stale_files(repo: str, settings: Settings, manifest: IndexManifest) -> list
     return sorted(stale)
 
 
-def _wrong_embedding_dimensions(store_kind: str, settings: Settings, index_name: str) -> list[str]:
-    if store_kind != "simple":
+def _wrong_embedding_dimensions(vector_store: VectorStore, settings: Settings) -> list[str]:
+    """Return ids of vectors whose embedding length does not match the expected dimensions.
+
+    Only the simple JSON store persists a plain file on disk; other stores
+    don't expose a ``path`` attribute, in which case nothing can be checked.
+    """
+    path = getattr(vector_store, "path", None)
+    if not isinstance(path, Path) or not path.exists():
         return []
 
-    vector_path = settings.indexes_dir / "vectors" / f"{index_name}.json"
-    if not vector_path.exists():
-        return []
-
-    records = json.loads(vector_path.read_text(encoding="utf-8"))
+    records = json.loads(path.read_text(encoding="utf-8"))
     return sorted(
         str(record.get("id", ""))
         for record in records
