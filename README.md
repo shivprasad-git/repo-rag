@@ -8,6 +8,24 @@ Repo RAG is a GitHub repository retrieval-augmented generation MVP. It indexes a
 
 The project focuses on the backend RAG pipeline: parsing, chunking, embeddings, vector search, reranking, incremental indexing, and prompt construction.
 
+## Table of Contents
+
+- [What It Does](#what-it-does)
+- [Architecture](#architecture)
+- [Project Layout](#project-layout)
+- [Setup](#setup)
+- [Quick Start](#quick-start)
+- [Index A Repository](#index-a-repository)
+- [Query](#query)
+- [Ask](#ask)
+- [Index Health](#index-health)
+- [Models](#models)
+- [Chunking](#chunking)
+- [Retrieval](#retrieval)
+- [Optional API](#optional-api)
+- [Current Scope](#current-scope)
+- [Credits](#credits)
+
 ## What It Does
 
 - Clone a GitHub repository or load a local repository.
@@ -45,13 +63,37 @@ Repository
 
 The vector store only keeps embeddings and minimal filter metadata. The document store keeps full chunk content and full metadata. Retrieval first finds chunk IDs, then hydrates the full chunks before building the prompt.
 
+## Project Layout
+
+The `app` package is split into focused modules, each with a clear responsibility:
+
+```text
+app/
+  api.py                        FastAPI endpoints (/index, /query)
+  cli.py                        Command-line interface
+  pipeline.py                   Orchestrates indexing and querying
+  config/                       Dataclass-driven settings
+  docstore/                     Full chunk content + metadata (JSON)
+  vectorstore/                  Embeddings + minimal metadata (Chroma/JSON)
+  embeddings/                   Embedding providers
+  retrieval/                    Hybrid search, filters, reranking
+  indexing/                     Manifest, health checks, index info
+  ingest/                       Discovery, parsing, chunking, splitting
+  models/                       Shared data models (Chunk, ChunkType)
+  llm/                          LLM-ready prompt construction
+```
+
 ## Setup
+
+Requires Python 3.10+ (the project uses `list[str]` and `str | None` type syntax).
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
+
+The first indexing run downloads the embedding model (and the reranker model if enabled) from Hugging Face. Subsequent runs reuse the cached models.
 
 ## Quick Start
 

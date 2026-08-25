@@ -55,9 +55,6 @@ class Tokenizer:
         """
         return [len(ids) for ids in self._encode_many(list(texts))]
 
-    def _encode(self, text: str) -> list[int]:
-        return self.tokenizer.encode(text, add_special_tokens=False)
-
     def _encode_many(self, texts: list[str]) -> list[list[int]]:
         encoded = self.tokenizer(
             texts,
