@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 
 from app.config import Settings
-from app.docstore import build_chunk_store
+from app.docstore import SimpleJsonChunkStore, build_chunk_store
 from app.embeddings import EmbeddingProvider, SentenceTransformerEmbeddingProvider
 from app.indexing.manifest import IndexManifest, build_manifest_path, file_content_hash, index_config
 from app.ingest.chunker import create_chunks_for_files
@@ -17,6 +17,7 @@ from app.retrieval.filters import MetadataFilters
 from app.retrieval.reranker import CrossEncoderMiniLMReranker, Reranker
 from app.retrieval.search import Retriever
 from app.vectorstore import build_vector_store
+from app.vectorstore.base import VectorStore
 
 EMBEDDING_BATCH_SIZE = 64
 
@@ -52,26 +53,27 @@ def _embed_in_batches(embedder: EmbeddingProvider, texts: list[str], batch_size:
     return embeddings
 
 
-def index_repository(repo: str, store_kind: str, settings: Settings, index_name: str | None = None) -> tuple[Path, int]:
-    start = time.monotonic()
-    logger.info("Indexing repository: %s (store=%s, index=%s)", repo, store_kind, index_name or settings.collection_name)
-
-    repo_path = load_repository(repo, settings.repositories_dir)
-    logger.info("Repository ready at: %s", repo_path)
-
+def _build_stores(
+    store_kind: str,
+    settings: Settings,
+    index_name: str | None,
+) -> tuple[SimpleJsonChunkStore, VectorStore]:
+    """Build the chunk and vector stores for an index."""
     name = index_name or settings.collection_name
-    chunk_store = build_chunk_store(settings.indexes_dir, name)
-    vector_store = build_vector_store(store_kind, settings, index_name=index_name)
-    manifest = IndexManifest.load(build_manifest_path(settings.indexes_dir, name))
-    config = index_config(settings, store_kind)
+    return build_chunk_store(settings.indexes_dir, name), build_vector_store(store_kind, settings, index_name=index_name)
 
-    discovered_files = discover_files(repo_path, settings)
-    current_hashes = {
-        str(file_path.relative_to(repo_path)): file_content_hash(file_path)
-        for file_path in discovered_files
-    }
+
+def _incremental_diff(
+    manifest: IndexManifest,
+    current_hashes: dict[str, str],
+    config: dict,
+) -> tuple[list[str], list[str]]:
+    """Return ``(deleted_paths, changed_paths)`` for the incremental update plan.
+
+    When the index configuration changed, every indexed file is treated as
+    changed so the stores are rebuilt with the new settings.
+    """
     manifest_files = manifest.files
-
     deleted_paths = sorted(set(manifest_files) - set(current_hashes))
     changed_paths = sorted(
         path
@@ -83,12 +85,37 @@ def index_repository(repo: str, store_kind: str, settings: Settings, index_name:
         logger.info("Index config changed; rebuilding all indexed files")
         deleted_paths = sorted(manifest_files)
         changed_paths = sorted(current_hashes)
+    return deleted_paths, changed_paths
 
+
+def _collect_stale_chunk_ids(manifest: IndexManifest, deleted_paths: list[str], changed_paths: list[str]) -> list[str]:
+    """Drop changed/deleted files from the manifest and return their chunk ids."""
     stale_chunk_ids: list[str] = []
     for relative_path in deleted_paths:
         stale_chunk_ids.extend(manifest.remove_file(relative_path))
     for relative_path in changed_paths:
         stale_chunk_ids.extend(manifest.remove_file(relative_path))
+    return stale_chunk_ids
+
+
+def index_repository(repo: str, store_kind: str, settings: Settings, index_name: str | None = None) -> tuple[Path, int]:
+    start = time.monotonic()
+    logger.info("Indexing repository: %s (store=%s, index=%s)", repo, store_kind, index_name or settings.collection_name)
+
+    repo_path = load_repository(repo, settings.repositories_dir)
+    logger.info("Repository ready at: %s", repo_path)
+
+    name = index_name or settings.collection_name
+    chunk_store, vector_store = _build_stores(store_kind, settings, index_name)
+    manifest = IndexManifest.load(build_manifest_path(settings.indexes_dir, name))
+    config = index_config(settings, store_kind)
+
+    current_hashes = {
+        str(file_path.relative_to(repo_path)): file_content_hash(file_path)
+        for file_path in discover_files(repo_path, settings)
+    }
+    deleted_paths, changed_paths = _incremental_diff(manifest, current_hashes, config)
+    stale_chunk_ids = _collect_stale_chunk_ids(manifest, deleted_paths, changed_paths)
 
     if stale_chunk_ids:
         chunk_store.delete(stale_chunk_ids)
@@ -148,9 +175,7 @@ def query_repository(
 
     embedder = build_embedder(settings)
     reranker = build_reranker(settings)
-    name = index_name or settings.collection_name
-    chunk_store = build_chunk_store(settings.indexes_dir, name)
-    vector_store = build_vector_store(store_kind, settings, index_name=index_name)
+    chunk_store, vector_store = _build_stores(store_kind, settings, index_name)
     matches = Retriever(embedder, vector_store, settings=settings, chunk_store=chunk_store, reranker=reranker).retrieve(
         question,
         top_k=top_k,
@@ -171,8 +196,7 @@ def ask_repository(
     filters: MetadataFilters | None = None,
 ) -> str:
     name = index_name or settings.collection_name
-    chunk_store = build_chunk_store(settings.indexes_dir, name)
-    vector_store = build_vector_store(store_kind, settings, index_name=index_name)
+    chunk_store, vector_store = _build_stores(store_kind, settings, index_name)
     if not chunk_store.has_data() or not vector_store.has_data():
         logger.info("Index %s is empty; indexing repository before answering", name)
         index_repository(repo, store_kind, settings, index_name=index_name)
