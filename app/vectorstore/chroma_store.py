@@ -46,7 +46,7 @@ class ChromaVectorStore(VectorStore):
         filters: MetadataFilters | None = None,
     ) -> list[tuple[Chunk, float]]:
         where = _chroma_where(filters)
-        requested_results = top_k if where else max(top_k * 4, top_k)
+        requested_results = _chroma_requested_count(filters, top_k)
         query_args = {"query_embeddings": [query_embedding], "n_results": requested_results}
         if where:
             query_args["where"] = where
@@ -82,6 +82,22 @@ class ChromaVectorStore(VectorStore):
 
     def has_data(self) -> bool:
         return self.collection.count() > 0
+
+
+def _chroma_requested_count(filters: MetadataFilters | None, top_k: int) -> int:
+    """Return how many candidate vectors to request from Chroma.
+
+    Chroma can express ``language`` and ``chunk_type`` natively via ``where``,
+    but ``path_prefix`` cannot, so it is applied as a post-query filter. When a
+    ``path_prefix`` filter is present, request extra candidates so the local
+    filter never silently truncates the result to fewer than ``top_k`` items.
+    """
+    if filters is not None and filters.path_prefix:
+        return max(top_k * 4, top_k)
+    if _chroma_where(filters) is not None:
+        # Chroma applies the where clause server-side; top_k results suffice.
+        return top_k
+    return max(top_k * 4, top_k)
 
 
 def _chroma_where(filters: MetadataFilters | None) -> dict | None:
