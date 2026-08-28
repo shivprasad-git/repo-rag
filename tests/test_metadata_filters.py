@@ -1,6 +1,7 @@
 from app.docstore import SimpleJsonChunkStore
 from app.config import Settings
 from app.embeddings import EmbeddingProvider
+from app.ingest.searchable import searchable_chunks
 from app.models import Chunk, ChunkType
 from app.retrieval.filters import MetadataFilters
 from app.retrieval.search import Retriever
@@ -145,3 +146,23 @@ def test_chunk_type_filter_can_search_metadata_chunks(tmp_path) -> None:
     )
 
     assert [chunk.id for chunk, _ in matches] == ["auth-file-metadata"]
+
+
+def test_searchable_chunks_honors_explicit_chunk_type_filter() -> None:
+    chunks = [
+        Chunk(id="method", content="def login(): pass", metadata={"chunk_type": "method"}),
+        Chunk(id="file-metadata", content="file: auth.py", metadata={"chunk_type": "file_metadata"}),
+        Chunk(id="parse-error", content="??", metadata={"chunk_type": "parse_error"}),
+    ]
+
+    # An explicit chunk_type filter allows non-searchable types through but
+    # still constrains to the requested type, even for unfiltered input.
+    selected = searchable_chunks(chunks, Settings(), MetadataFilters(chunk_type=ChunkType.FILE_METADATA))
+    assert [chunk.id for chunk in selected] == ["file-metadata"]
+
+    selected_method = searchable_chunks(chunks, Settings(), MetadataFilters(chunk_type=ChunkType.METHOD))
+    assert [chunk.id for chunk in selected_method] == ["method"]
+
+    # Without a filter, only the configured searchable types are kept.
+    default = searchable_chunks(chunks, Settings())
+    assert [chunk.id for chunk in default] == ["method"]

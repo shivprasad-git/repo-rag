@@ -10,8 +10,20 @@ def searchable_chunks(
     settings: Settings,
     filters: MetadataFilters | None = None,
 ) -> list[Chunk]:
+    """Return the subset of *chunks* that the vector store should index.
+
+    Normally only the configured searchable chunk types (by default class,
+    function, method, markdown_section, text_file) are indexed.  However, when
+    the caller explicitly filters by ``chunk_type``, non-searchable types such
+    as ``file_metadata``, ``imports``, and ``parse_error`` are allowed through:
+    they live only in the document store, so keyword search is the only path
+    that can surface them.
+
+    In the filtered case the requested chunk type is still honored, so this
+    function stays correct even for callers passing unfiltered chunks.
+    """
     if filters is not None and filters.chunk_type:
-        return chunks
+        return [chunk for chunk in chunks if filters.matches(chunk)]
     searchable_types = _searchable_type_values(settings)
     return [chunk for chunk in chunks if chunk.metadata.get("chunk_type", "") in searchable_types]
 
