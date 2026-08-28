@@ -1,3 +1,5 @@
+import pytest
+
 from app.docstore import SimpleJsonChunkStore
 from app.config import Settings
 from app.embeddings import EmbeddingProvider
@@ -28,6 +30,14 @@ class PreferBillingReranker(Reranker):
             for chunk, score in matches
         ]
         return sorted(scored, key=lambda item: item[1], reverse=True)[:top_k]
+
+
+def test_retriever_requires_document_store(tmp_path) -> None:
+    # The vector stores persist only minimal metadata (not content), so the
+    # BM25 index and chunk hydration cannot work without the document store.
+    store = SimpleJsonVectorStore(tmp_path / "index.json")
+    with pytest.raises(TypeError):
+        Retriever(TestEmbeddingProvider(), store, settings=Settings())
 
 
 def test_hybrid_retrieval_uses_keyword_matches(tmp_path) -> None:

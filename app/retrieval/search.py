@@ -17,12 +17,20 @@ logger = get_logger(__name__)
 
 
 class Retriever:
+    """Hybrid (vector + BM25 keyword) retriever over an indexed repository.
+
+    The document store is required because keyword search and content
+    hydration both need full chunk text, which is only kept there. The vector
+    store alone holds embeddings plus minimal filter metadata, so it cannot
+    back keyword scoring or hydrated results on its own.
+    """
+
     def __init__(
         self,
         embedder: EmbeddingProvider,
         vector_store: VectorStore,
         settings: Settings,
-        chunk_store: SimpleJsonChunkStore | None = None,
+        chunk_store: SimpleJsonChunkStore,
         reranker: Reranker | None = None,
         vector_weight: float = 0.25,
         keyword_weight: float = 0.75,
@@ -103,20 +111,15 @@ class Retriever:
         if self._bm25_index is None or self._bm25_source_changed():
             chunks = self._all_full_chunks(filters=None)
             self._bm25_index = BM25KeywordIndex(chunks)
-            self._bm25_source_path = _source_path(self.chunk_store, self.vector_store)
+            self._bm25_source_path = self.chunk_store.path
             self._bm25_source_mtime = _source_mtime(self._bm25_source_path)
         return self._bm25_index
 
     def _bm25_source_changed(self) -> bool:
         """Return True when the underlying chunk source file changed on disk.
 
-        Uses the chunk store file mtime when available, falling back to the
-        vector store file.  This avoids re-loading and hashing every chunk on
-        each query just to detect a change.
-
-        When no on-disk source is available (e.g. a Chroma-only setup without
-        a chunk store), there is no file to watch, so the index is rebuilt on
-        every query to stay correct.
+        Uses the chunk store file mtime. This avoids re-loading and hashing
+        every chunk on each query just to detect a change.
         """
         if self._bm25_source_path is None:
             return True
@@ -124,17 +127,13 @@ class Retriever:
         return mtime != self._bm25_source_mtime
 
     def _all_full_chunks(self, filters: MetadataFilters | None) -> list[Chunk]:
-        if self.chunk_store is not None:
-            return searchable_chunks(self.chunk_store.all_chunks(filters=filters), self.settings, filters=filters)
-        return searchable_chunks(self.vector_store.all_chunks(filters=filters), self.settings, filters=filters)
+        return searchable_chunks(self.chunk_store.all_chunks(filters=filters), self.settings, filters=filters)
 
     def _hydrate(self, chunk: Chunk) -> Chunk:
-        if self.chunk_store is None:
-            return chunk
         return self.chunk_store.get(chunk.id) or chunk
 
     def _expand_context_parts(self, matches: list[tuple[Chunk, float]]) -> list[tuple[Chunk, float]]:
-        if self.chunk_store is None or self.settings.context_window_parts <= 0:
+        if self.settings.context_window_parts <= 0:
             return matches
 
         expanded: list[tuple[Chunk, float]] = []
@@ -163,7 +162,7 @@ class Retriever:
         end = min(part_count, part_index + window)
         parts: list[Chunk] = []
         for index in range(start, end + 1):
-            part = self.chunk_store.get(f"{parent_id}:part:{index}") if self.chunk_store is not None else None
+            part = self.chunk_store.get(f"{parent_id}:part:{index}")
             if part is None:
                 continue
             if part.id == chunk.id:
@@ -171,14 +170,6 @@ class Retriever:
             else:
                 parts.append(_context_expansion(part, chunk.id))
         return parts or [chunk]
-
-
-def _source_path(chunk_store: SimpleJsonChunkStore | None, vector_store: VectorStore) -> Path | None:
-    """Return the on-disk source file that backs the BM25 corpus."""
-    if chunk_store is not None:
-        return chunk_store.path
-    path = getattr(vector_store, "path", None)
-    return path if isinstance(path, Path) else None
 
 
 def _source_mtime(path: Path | None) -> float | None:
