@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import re
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 from app.config import Settings
 from app.docstore import SimpleJsonChunkStore, build_chunk_store
@@ -22,6 +24,24 @@ from app.vectorstore.base import VectorStore
 EMBEDDING_BATCH_SIZE = 64
 
 logger = get_logger(__name__)
+
+
+def default_index_name(repo: str) -> str:
+    """Derive a stable index name from a GitHub URL or local repository path.
+
+    Examples::
+
+        https://github.com/pallets/flask  -> "flask"
+        /path/to/local/my-project         -> "my-project"
+    """
+    source = Path(repo.strip()).expanduser()
+    if source.exists():
+        name = source.name
+    else:
+        parsed = urlparse(repo.strip())
+        name = Path(parsed.path).name.removesuffix(".git")
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", name).strip("-").lower()
+    return slug or "repo_rag"
 
 
 def build_embedder(settings: Settings) -> EmbeddingProvider:
@@ -99,14 +119,14 @@ def _collect_stale_chunk_ids(manifest: IndexManifest, deleted_paths: list[str], 
 
 
 def index_repository(repo: str, store_kind: str, settings: Settings, index_name: str | None = None) -> tuple[Path, int]:
+    name = index_name or default_index_name(repo)
     start = time.monotonic()
-    logger.info("Indexing repository: %s (store=%s, index=%s)", repo, store_kind, index_name or settings.collection_name)
+    logger.info("Indexing repository: %s (store=%s, index=%s)", repo, store_kind, name)
 
     repo_path = load_repository(repo, settings.repositories_dir)
     logger.info("Repository ready at: %s", repo_path)
 
-    name = index_name or settings.collection_name
-    chunk_store, vector_store = _build_stores(store_kind, settings, index_name)
+    chunk_store, vector_store = _build_stores(store_kind, settings, name)
     manifest = IndexManifest.load(build_manifest_path(settings.indexes_dir, name))
     config = index_config(settings, store_kind)
 
@@ -195,10 +215,10 @@ def ask_repository(
     index_name: str | None = None,
     filters: MetadataFilters | None = None,
 ) -> str:
-    name = index_name or settings.collection_name
-    chunk_store, vector_store = _build_stores(store_kind, settings, index_name)
+    name = index_name or default_index_name(repo)
+    chunk_store, vector_store = _build_stores(store_kind, settings, name)
     if not chunk_store.has_data() or not vector_store.has_data():
         logger.info("Index %s is empty; indexing repository before answering", name)
-        index_repository(repo, store_kind, settings, index_name=index_name)
-    matches = query_repository(question, store_kind, settings, top_k, index_name=index_name, filters=filters)
+        index_repository(repo, store_kind, settings, index_name=name)
+    matches = query_repository(question, store_kind, settings, top_k, index_name=name, filters=filters)
     return build_prompt(question, matches, settings=settings)

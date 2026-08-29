@@ -2,22 +2,36 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import replace
 
-from app.config import Settings
+from app.config import Settings, cli_defaults, load_settings
 from app.indexing import check_index_health, format_health_report, format_index_info, get_index_info
 from app.llm import build_prompt
 from app.logging_config import setup_logging
-from app.pipeline import ask_repository, index_repository, query_repository
+from app.pipeline import ask_repository, default_index_name, index_repository, query_repository
 from app.retrieval.filters import MetadataFilters
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Repo RAG Phase 1 MVP")
-    parser.add_argument("--store", choices=["chroma", "simple"], default="chroma")
-    parser.add_argument("--index-name", default=None)
+    defaults = cli_defaults()
+    parser = argparse.ArgumentParser(
+        description="Repo RAG Phase 1 MVP",
+        epilog="Default precedence: command-line flag > .env / RAG_* environment variable > built-in default.",
+    )
+    parser.add_argument("--store", choices=["chroma", "simple"], default=defaults.store)
+    parser.add_argument(
+        "--index-name",
+        default=defaults.index_name,
+        help="Index name. Defaults to the repository name for index/ask, otherwise the collection name.",
+    )
     parser.add_argument("--embedding-model", default=None)
     parser.add_argument("--reranker-model", default=None)
-    parser.add_argument("--no-reranker", action="store_true", help="Disable MiniLM cross-encoder reranking")
+    parser.add_argument(
+        "--no-reranker",
+        action="store_true",
+        default=defaults.no_reranker,
+        help="Disable MiniLM cross-encoder reranking",
+    )
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug-level logging")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -50,8 +64,9 @@ def main() -> None:
     settings = _settings_from_args(args)
 
     if args.command == "index":
-        repo_path, chunk_count = index_repository(args.repo, args.store, settings, args.index_name)
-        print(f"Indexed {chunk_count} chunks from {repo_path}")
+        index_name = args.index_name or default_index_name(args.repo)
+        repo_path, chunk_count = index_repository(args.repo, args.store, settings, index_name)
+        print(f"Indexed {chunk_count} chunks from {repo_path} (index: {index_name})")
     elif args.command == "query":
         matches = query_repository(
             args.question,
@@ -100,10 +115,11 @@ def _add_filter_args(parser: argparse.ArgumentParser) -> None:
 
 
 def _settings_from_args(args: argparse.Namespace) -> Settings:
-    settings = Settings()
+    settings = load_settings()
     if args.embedding_model is None and args.reranker_model is None and not args.no_reranker:
         return settings
-    return Settings(
+    return replace(
+        settings,
         embedding_model=args.embedding_model or settings.embedding_model,
         reranker_model=args.reranker_model or settings.reranker_model,
         reranker_enabled=False if args.no_reranker else settings.reranker_enabled,

@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from app.config import Settings
+from app.config import load_settings
 from app.logging_config import get_logger, setup_logging
 from app.pipeline import index_repository, query_repository
 from app.retrieval.filters import MetadataFilters
@@ -11,7 +11,7 @@ from app.retrieval.filters import MetadataFilters
 setup_logging()
 
 app = FastAPI(title="Repo RAG Phase 1")
-settings = Settings()
+settings = load_settings()
 logger = get_logger(__name__)
 
 

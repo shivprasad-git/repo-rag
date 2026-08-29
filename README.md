@@ -19,6 +19,7 @@ The project focuses on the backend RAG pipeline: parsing, chunking, embeddings, 
 - [Query](#query)
 - [Ask](#ask)
 - [Index Health](#index-health)
+- [Defaults](#defaults)
 - [Models](#models)
 - [Chunking](#chunking)
 - [Retrieval](#retrieval)
@@ -100,42 +101,46 @@ The first indexing run downloads the embedding model (and the reranker model if 
 For a local repository, the shortest path is:
 
 ```bash
-python3 -m app.cli --store simple --index-name sample index \
-  --repo /path/to/local/repo
+python3 -m app.cli index --repo /path/to/local/repo
 
-python3 -m app.cli --store simple --index-name sample query \
+python3 -m app.cli query --index-name <repo-folder-name> \
   --question "Where is authentication implemented?" \
   --show-content
 ```
 
+The index name is derived from the repository name by default, so `index` needs
+nothing but `--repo` (indexing `https://github.com/pallets/flask` creates the
+`flask` index). Override it with `--index-name`, or set shared defaults once in
+a `.env` file (see [Defaults](#defaults)).
+
 Use `--verbose` when you want indexing and retrieval logs:
 
 ```bash
-python3 -m app.cli --verbose --store simple --index-name sample query \
+python3 -m app.cli --verbose query --index-name <repo-folder-name> \
   --question "How does login work?"
 ```
 
 ## Index A Repository
 
-Using Chroma:
+`index` only requires `--repo`; everything else already has a default:
 
 ```bash
-python3 -m app.cli --store chroma --index-name flask index \
-  --repo https://github.com/pallets/flask
-```
+# GitHub URL -> "flask" index in Chroma (default store)
+python3 -m app.cli index --repo https://github.com/pallets/flask
 
-Using the local JSON vector store:
+# Local repo -> "<folder-name>" index with the local JSON vector store
+python3 -m app.cli --store simple index --repo /path/to/local/repo
 
-```bash
-python3 -m app.cli --store simple --index-name flask index \
-  --repo /path/to/local/repo
+# Explicitly override the derived index name
+python3 -m app.cli index --repo https://github.com/pallets/flask --index-name flask-dev
 ```
 
 Indexing is incremental. Re-running `index` skips unchanged files, replaces changed files, and removes deleted files from the index.
 
 ## Query
 
-Retrieve matching chunks:
+Retrieve matching chunks from a named index. Use the same index name that was
+used when indexing (the derived repository name unless overridden):
 
 ```bash
 python3 -m app.cli --store simple --index-name flask query \
@@ -190,8 +195,7 @@ python3 -m app.cli --store simple --index-name flask query \
 `ask` ensures the index exists, retrieves relevant chunks, and prints the prompt to send to an LLM.
 
 ```bash
-python3 -m app.cli --store simple --index-name sample ask \
-  --repo /path/to/local/repo \
+python3 -m app.cli ask --repo /path/to/local/repo \
   --question "How does login work?" \
   --top-k 3
 ```
@@ -219,6 +223,34 @@ python3 -m app.cli --store simple --index-name flask health \
 
 The health check reports missing document chunks, doc chunks missing from the manifest, missing vectors, orphan vectors, embedding dimension mismatches for the JSON vector store, config mismatches, and stale file hashes.
 
+## Defaults
+
+Everything has a fallback, in this order: **command-line flag > `RAG_*` environment
+variable / `.env` file > built-in default.**
+
+Set project-wide defaults once in a `.env` file at the project root (already
+git-ignored). For example:
+
+```bash
+RAG_STORE=simple
+RAG_INDEX_NAME=flask
+RAG_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+RAG_RERANKER_ENABLED=false
+RAG_MAX_CHUNK_TOKENS=700
+RAG_MAX_PROMPT_CONTEXT_TOKENS=3000
+```
+
+With those set, `python3 -m app.cli query --question "..."` works without any
+`--store`/`--index-name` flags. Supported variables:
+
+- `RAG_STORE` — default vector store (`chroma` or `simple`)
+- `RAG_INDEX_NAME` — default index name (overrides the derived name)
+- `RAG_COLLECTION_NAME` — fallback collection name
+- `RAG_EMBEDDING_MODEL` / `RAG_EMBEDDING_DIMENSIONS` — embedding model settings
+- `RAG_RERANKER_MODEL` / `RAG_RERANKER_ENABLED` — reranker settings
+- `RAG_MAX_CHUNK_TOKENS` / `RAG_CHUNK_OVERLAP_TOKENS` — chunking settings
+- `RAG_CONTEXT_WINDOW_PARTS` / `RAG_MAX_PROMPT_CONTEXT_TOKENS` — context budget settings
+
 ## Models
 
 Default embedding model:
@@ -237,15 +269,13 @@ Override the embedding model:
 
 ```bash
 python3 -m app.cli --embedding-model sentence-transformers/all-MiniLM-L6-v2 \
-  --store simple \
-  --index-name sample \
-  query --question "How does login work?"
+  query --index-name sample --question "How does login work?"
 ```
 
 Disable reranking:
 
 ```bash
-python3 -m app.cli --no-reranker --store simple --index-name sample query \
+python3 -m app.cli --no-reranker query --index-name sample \
   --question "How does login work?"
 ```
 
