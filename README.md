@@ -341,12 +341,10 @@ This is an MVP backend, not a production service. It does not yet include:
 - large-scale evaluation metrics,
 - broad language support beyond the current parser set.
 
-## Credits
+## AI Credits
 
 <p align="center">
   <img src="assets/codex-color.svg" alt="Codex logo" width="42">
   &nbsp;&nbsp;
   <img src="assets/deepseek-color.svg" alt="DeepSeek logo" width="42">
 </p>
-
-Built with help from Codex and DeepSeek.
