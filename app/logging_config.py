@@ -9,8 +9,7 @@ DEFAULT_LOG_LEVEL = "INFO"
 LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 DATE_FORMAT = "%H:%M:%S"
 
-# Third-party loggers that are noisy at INFO level.  They are kept at
-# WARNING so the application's own logs remain readable.
+# Noisy third-party loggers kept at WARNING so app logs stay readable.
 QUIET_LOGGERS = (
     "httpx",
     "httpcore",
@@ -29,22 +28,13 @@ def setup_logging(
 ) -> None:
     """Configure the root logger for the application.
 
-    The log level is resolved in this order:
-      1. Explicit ``level`` argument.
-      2. ``REPO_RAG_LOG_LEVEL`` environment variable.
-      3. ``DEFAULT_LOG_LEVEL`` (INFO).
-
-    Third-party library loggers are kept at WARNING by default so the
-    application's own progress messages remain readable.
-
-    Calling this more than once is safe: the root logger's handlers are
-    replaced rather than duplicated.
+    Level resolution: explicit ``level`` argument, else ``REPO_RAG_LOG_LEVEL``,
+    else ``DEFAULT_LOG_LEVEL``. Calling again replaces existing handlers.
     """
     resolved_level = _resolve_level(level)
     root = logging.getLogger()
     root.setLevel(resolved_level)
 
-    # Remove existing handlers to avoid duplicate output on re-configuration.
     for handler in list(root.handlers):
         root.removeHandler(handler)
 

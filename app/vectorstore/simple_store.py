@@ -76,11 +76,7 @@ class SimpleJsonVectorStore(VectorStore):
         return bool(self._load_records())
 
     def _load_records(self) -> list[dict[str, Any]]:
-        """Load (or return cached) vector records.
-
-        The in-memory list is invalidated when the file mtime changes, so
-        repeated reads avoid re-parsing the JSON file on every call.
-        """
+        """Load vector records, using a cache invalidated by the file mtime."""
         mtime = self.path.stat().st_mtime if self.path.exists() else None
         if self._records is not None and mtime == self._loaded_mtime:
             return self._records
@@ -118,6 +114,5 @@ def _records_to_matrix(records: list[dict[str, Any]]) -> Any:
 
     embeddings = [record["embedding"] for record in records]
     matrix = np.asarray(embeddings, dtype=np.float32)
-    # Embeddings are L2-normalized at creation time in
-    # SentenceTransformerEmbeddingProvider, so cosine similarity == dot product.
+    # Embeddings are L2-normalized at creation, so cosine similarity == dot product.
     return matrix

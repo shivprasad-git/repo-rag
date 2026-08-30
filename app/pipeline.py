@@ -55,12 +55,7 @@ def build_reranker(settings: Settings) -> Reranker | None:
 
 
 def _embed_in_batches(embedder: EmbeddingProvider, texts: list[str], batch_size: int = EMBEDDING_BATCH_SIZE) -> list[list[float]]:
-    """Embed texts in fixed-size batches to bound peak memory usage.
-
-    ``embed_many`` on all texts at once can exhaust CPU/GPU memory for large
-    repositories; batching keeps the peak memory proportional to the batch
-    size rather than the whole corpus.
-    """
+    """Embed texts in fixed-size batches to keep peak memory proportional to batch size."""
     if batch_size <= 0:
         return embedder.embed_many(texts)
     embeddings: list[list[float]] = []
@@ -90,8 +85,7 @@ def _incremental_diff(
 ) -> tuple[list[str], list[str]]:
     """Return ``(deleted_paths, changed_paths)`` for the incremental update plan.
 
-    When the index configuration changed, every indexed file is treated as
-    changed so the stores are rebuilt with the new settings.
+    A config change rebuilds every indexed file.
     """
     manifest_files = manifest.files
     deleted_paths = sorted(set(manifest_files) - set(current_hashes))

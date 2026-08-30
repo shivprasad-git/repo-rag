@@ -76,11 +76,7 @@ _SETTINGS_ENV_OVERRIDES: dict[str, tuple[str, Callable[[str], object]]] = {
 
 @dataclass(frozen=True)
 class CliDefaults:
-    """Command-line defaults that can be configured once via ``.env``.
-
-    These are not :class:`Settings` fields: ``store`` and ``index_name`` only
-    affect argument parsing, and ``no_reranker`` toggles the CLI flag.
-    """
+    """Command-line defaults configurable via ``.env`` (not :class:`Settings` fields)."""
 
     store: str = "chroma"
     index_name: str | None = None

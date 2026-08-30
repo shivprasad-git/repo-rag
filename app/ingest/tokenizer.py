@@ -8,13 +8,7 @@ if TYPE_CHECKING:
 
 
 class Tokenizer:
-    """Token counter backed by the same tokenizer used by the embedding model.
-
-    Loads only the tokenizer (not the full model) via HuggingFace's
-    ``AutoTokenizer``, giving accurate token counts that match what the
-    embedding model actually sees, without the overhead of loading the
-    entire model weights.
-    """
+    """Token counter backed by the embedding model's own tokenizer (weights not loaded)."""
 
     def __init__(self, model_name: str = "sentence-transformers/all-MiniLM-L6-v2") -> None:
         self.model_name = model_name
@@ -36,22 +30,13 @@ class Tokenizer:
         return AutoTokenizer.from_pretrained(self.model_name)
 
     def count(self, text: str) -> int:
-        """Return the number of tokens the embedding model will see for *text*.
-
-        Includes special tokens (e.g. ``[CLS]`` / ``[SEP]``) so the
-        result matches what the model actually receives.
-        """
+        """Return the number of tokens the embedding model will see for *text*, special tokens included."""
         return len(self.tokenizer.encode(text, add_special_tokens=True))
 
     def count_many(self, texts: Sequence[str]) -> list[int]:
-        """Return token counts for each text in *texts*.
+        """Return token counts for each text in *texts*, in the same order.
 
-        Uses batched encoding for efficiency.  The result list is in the
-        same order as *texts*.
-
-        .. note::
-           Special tokens are **not** included in per-line counts
-           because they are added once per chunk, not per line.
+        Special tokens are excluded because they are added once per chunk, not per line.
         """
         return [len(ids) for ids in self._encode_many(list(texts))]
 

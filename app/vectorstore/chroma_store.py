@@ -87,10 +87,9 @@ class ChromaVectorStore(VectorStore):
 def _chroma_requested_count(filters: MetadataFilters | None, top_k: int) -> int:
     """Return how many candidate vectors to request from Chroma.
 
-    Chroma can express ``language`` and ``chunk_type`` natively via ``where``,
-    but ``path_prefix`` cannot, so it is applied as a post-query filter. When a
-    ``path_prefix`` filter is present, request extra candidates so the local
-    filter never silently truncates the result to fewer than ``top_k`` items.
+    Chroma can filter ``language``/``chunk_type`` natively but not
+    ``path_prefix``; when that filter is present, request extra candidates so
+    the post-query filter cannot truncate results below ``top_k``.
     """
     if filters is not None and filters.path_prefix:
         return max(top_k * 4, top_k)

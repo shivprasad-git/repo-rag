@@ -17,12 +17,10 @@ logger = get_logger(__name__)
 
 
 class Retriever:
-    """Hybrid (vector + BM25 keyword) retriever over an indexed repository.
+    """Hybrid (vector + BM25 keyword) retriever.
 
-    The document store is required because keyword search and content
-    hydration both need full chunk text, which is only kept there. The vector
-    store alone holds embeddings plus minimal filter metadata, so it cannot
-    back keyword scoring or hydrated results on its own.
+    Full chunk text lives only in the document store, so it backs keyword
+    search and content hydration; the vector store holds embeddings only.
     """
 
     def __init__(
@@ -98,13 +96,7 @@ class Retriever:
         return expanded
 
     def _get_bm25_index(self, filters: MetadataFilters | None = None) -> BM25KeywordIndex:
-        """Return a cached BM25 index, rebuilding only when chunks change.
-
-        When filters are applied, the BM25 index is always rebuilt from the
-        filtered chunk subset because document frequencies change.  For the
-        common unfiltered case, the index is cached and reused across queries
-        until the underlying chunk store changes.
-        """
+        """Return a cached BM25 index, rebuilt per filtered subset or when the chunk store changes."""
         if filters is not None and filters.has_filters:
             return BM25KeywordIndex(self._all_full_chunks(filters))
 
@@ -116,11 +108,7 @@ class Retriever:
         return self._bm25_index
 
     def _bm25_source_changed(self) -> bool:
-        """Return True when the underlying chunk source file changed on disk.
-
-        Uses the chunk store file mtime. This avoids re-loading and hashing
-        every chunk on each query just to detect a change.
-        """
+        """Return True when the underlying chunk store file changed on disk (checked via mtime)."""
         if self._bm25_source_path is None:
             return True
         mtime = _source_mtime(self._bm25_source_path)

@@ -139,11 +139,7 @@ def _stale_files(repo: str, settings: Settings, manifest: IndexManifest) -> list
 
 
 def _wrong_embedding_dimensions(vector_store: VectorStore, settings: Settings) -> list[str]:
-    """Return ids of vectors whose embedding length does not match the expected dimensions.
-
-    Only the simple JSON store persists a plain file on disk; other stores
-    don't expose a ``path`` attribute, in which case nothing can be checked.
-    """
+    """Return ids of vectors with a dimension mismatch (only checkable for the simple JSON store)."""
     path = getattr(vector_store, "path", None)
     if not isinstance(path, Path) or not path.exists():
         return []

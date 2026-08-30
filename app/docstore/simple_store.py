@@ -46,12 +46,7 @@ class SimpleJsonChunkStore:
         return bool(self._load_index())
 
     def _load_index(self) -> dict[str, Chunk]:
-        """Load (or return cached) chunks indexed by id.
-
-        The in-memory dict index is invalidated when the file mtime changes,
-        so repeated get() calls are O(1) while external modifications to the
-        JSON file are still picked up.
-        """
+        """Load chunks indexed by id, using a cache invalidated by the file mtime."""
         mtime = self.path.stat().st_mtime if self.path.exists() else None
         if self._chunks is not None and mtime == self._loaded_mtime:
             return self._chunks
