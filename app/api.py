@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from app.config import load_settings
 from app.logging_config import get_logger, setup_logging
-from app.pipeline import index_repository, query_repository
+from app.pipeline import ask_repository, index_repository, query_repository
 from app.retrieval.filters import MetadataFilters
 
 setup_logging()
@@ -31,6 +31,22 @@ class QueryRequest(BaseModel):
     path_prefix: str | None = None
 
 
+class AskRequest(BaseModel):
+    repo: str
+    question: str
+    store: str = "chroma"
+    index_name: str | None = None
+    top_k: int = 5
+    language: str | None = None
+    chunk_type: str | None = None
+    path_prefix: str | None = None
+
+
+@app.get("/health")
+def health() -> dict:
+    return {"status": "ok"}
+
+
 @app.post("/index")
 def index(request: IndexRequest) -> dict:
     logger.info("POST /index repo=%s store=%s index=%s", request.repo, request.store, request.index_name)
@@ -42,18 +58,13 @@ def index(request: IndexRequest) -> dict:
 @app.post("/query")
 def query(request: QueryRequest) -> dict:
     logger.info("POST /query question=%r top_k=%d store=%s", request.question, request.top_k, request.store)
-    filters = MetadataFilters(
-        language=request.language,
-        chunk_type=request.chunk_type,
-        path_prefix=request.path_prefix,
-    )
     matches = query_repository(
         request.question,
         request.store,
         settings,
         request.top_k,
         request.index_name,
-        filters=filters if filters.has_filters else None,
+        filters=_filters_from(request),
     )
     logger.info("POST /query returned %d matches", len(matches))
     return {
@@ -62,3 +73,27 @@ def query(request: QueryRequest) -> dict:
             for chunk, score in matches
         ]
     }
+
+
+@app.post("/ask")
+def ask(request: AskRequest) -> dict:
+    logger.info("POST /ask repo=%s question=%r top_k=%d store=%s", request.repo, request.question, request.top_k, request.store)
+    prompt = ask_repository(
+        request.repo,
+        request.question,
+        request.store,
+        settings,
+        request.top_k,
+        index_name=request.index_name,
+        filters=_filters_from(request),
+    )
+    return {"prompt": prompt}
+
+
+def _filters_from(request: AskRequest | QueryRequest) -> MetadataFilters | None:
+    filters = MetadataFilters(
+        language=request.language,
+        chunk_type=request.chunk_type,
+        path_prefix=request.path_prefix,
+    )
+    return filters if filters.has_filters else None
