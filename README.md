@@ -25,7 +25,7 @@ The project focuses on the backend RAG pipeline: parsing, chunking, embeddings, 
 - [Retrieval](#retrieval)
 - [Optional API](#optional-api)
 - [Current Scope](#current-scope)
-- [Credits](#credits)
+- [AI Credits](#ai-credits)
 
 ## What It Does
 
@@ -72,6 +72,7 @@ The `app` package is split into focused modules, each with a clear responsibilit
 app/
   api.py                        FastAPI endpoints (/index, /query)
   cli.py                        Command-line interface
+  cli_format.py                 CLI text/JSON result formatting
   pipeline.py                   Orchestrates indexing and querying
   config/                       Dataclass-driven settings
   docstore/                     Full chunk content + metadata (JSON)
@@ -189,6 +190,14 @@ python3 -m app.cli --store simple --index-name flask query \
   --question "How is routing implemented?" \
   --prompt
 ```
+
+Query output supports three formats:
+
+- default text output for quick terminal inspection
+- `--json` for scripts and downstream tools
+- `--prompt` for LLM-ready context
+
+Use `--show-content` to include chunk previews and `--debug-scores` to include vector, keyword, combined, and reranker scores.
 
 ## Ask
 
