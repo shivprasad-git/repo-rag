@@ -20,6 +20,7 @@ The project focuses on the backend RAG pipeline: parsing, chunking, embeddings, 
 - [Ask](#ask)
 - [Index Health](#index-health)
 - [Defaults](#defaults)
+- [Tests](#tests)
 - [Models](#models)
 - [Chunking](#chunking)
 - [Retrieval](#retrieval)
@@ -258,6 +259,21 @@ With those set, `python3 -m app.cli query --question "..."` works without any
 - `RAG_EMBEDDING_MODEL` / `RAG_EMBEDDING_DIMENSIONS` — embedding model settings
 - `RAG_RERANKER_MODEL` / `RAG_RERANKER_ENABLED` — reranker settings
 - `RAG_MAX_CHUNK_TOKENS` / `RAG_CHUNK_OVERLAP_TOKENS` — chunking settings
+
+## Tests
+
+Run the test suite:
+
+```bash
+python3 -m pytest
+```
+
+Run tests with line coverage:
+
+```bash
+python3 -m coverage run -m pytest
+python3 -m coverage report -m
+```
 - `RAG_CONTEXT_WINDOW_PARTS` / `RAG_MAX_PROMPT_CONTEXT_TOKENS` — context budget settings
 
 ## Models

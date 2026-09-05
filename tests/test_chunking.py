@@ -131,3 +131,60 @@ def test_oversized_method_chunks_are_split_into_parts(tmp_path: Path, monkeypatc
     assert len({chunk.metadata["parent_chunk_id"] for chunk in method_parts}) == 1
     assert method_parts[0].metadata["start_line"] == 2
     assert method_parts[-1].metadata["end_line"] == 33
+
+
+def test_parser_handles_common_python_and_markdown_edge_cases(tmp_path: Path, monkeypatch) -> None:
+    _use_test_tokenizer(monkeypatch)
+    (tmp_path / "service.py").write_text(
+        "\n".join(
+            [
+                "from dataclasses import dataclass",
+                "",
+                "@dataclass",
+                "class AccountService:",
+                "    \"\"\"Account operations.\"\"\"",
+                "    cache = {}",
+                "    DEFAULT_ROLE: str = 'reader'",
+                "",
+                "    @classmethod",
+                "    async def create(cls, username: str):",
+                "        def normalize(value):",
+                "            return value.strip().lower()",
+                "        return cls(normalize(username))",
+                "",
+                "async def load_account(user_id: str):",
+                "    return await fetch_user(user_id)",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "guide.md").write_text(
+        "# Guide\n\nIntro.\n\n## Accounts\n\nAccount details.\n\n### Creation\n\nCreate users.\n",
+        encoding="utf-8",
+    )
+
+    chunks = create_chunks(tmp_path, Settings())
+    chunks_by_symbol = {chunk.metadata["symbol"]: chunk for chunk in chunks}
+
+    class_chunk = chunks_by_symbol["AccountService"]
+    assert "@dataclass" in class_chunk.content
+    assert "cache = {}" in class_chunk.content
+    assert "DEFAULT_ROLE: str = 'reader'" in class_chunk.content
+    assert "async def create" not in class_chunk.content
+    assert class_chunk.metadata["decorators"] == "@dataclass"
+    assert class_chunk.metadata["docstring"] == "Account operations."
+
+    method_metadata = chunks_by_symbol["AccountService.create"].metadata
+    assert method_metadata["is_async"] is True
+    assert method_metadata["decorators"] == "@classmethod"
+    assert method_metadata["class_name"] == "AccountService"
+    assert method_metadata["parent_symbol"] == "AccountService"
+    method_calls = set(method_metadata["calls"].splitlines())
+    assert {"value.strip", "cls", "normalize"} <= method_calls
+
+    function_metadata = chunks_by_symbol["load_account"].metadata
+    assert function_metadata["is_async"] is True
+    assert function_metadata["calls"] == "fetch_user"
+
+    assert chunks_by_symbol["Creation"].metadata["heading_level"] == 3
+    assert chunks_by_symbol["Creation"].metadata["parent_headings"] == "Guide > Accounts"
