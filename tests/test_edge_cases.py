@@ -190,6 +190,9 @@ def test_oversized_single_line_never_splits_into_garbage(tmp_path: Path, monkeyp
     txt_chunks = [chunk for chunk in chunks if chunk.metadata["chunk_type"] == "text_file"]
     # A single physical line cannot be split, so the chunk is kept intact.
     assert len(md_chunks) == 1 and md_chunks[0].content == long_line
+    assert len(txt_chunks) == 1 and txt_chunks[0].content == long_txt
+
+
 def test_large_text_file_is_split_into_overlapping_parts(tmp_path: Path, monkeypatch) -> None:
     _use_test_tokenizer(monkeypatch)
     lines = [f"value {index}" for index in range(120)]
