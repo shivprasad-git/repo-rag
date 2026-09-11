@@ -1,0 +1,35 @@
+{
+  "name": "sample",
+  "repo": "work/sample_repo",
+  "store": "simple",
+  "index_name": "sample-repo",
+  "top_k": [3, 5],
+  "questions": [
+    {
+      "question": "How does login work?",
+      "relevant": [
+        {"file_path": "auth.py", "symbol": "AuthService.login", "chunk_type": "method"}
+      ]
+    },
+    {
+      "question": "How are JWT tokens validated?",
+      "relevant": [
+        {"symbol": "AuthService.validate_token"},
+        {"file_path": "README.md", "symbol": "Authentication"}
+      ]
+    },
+    {
+      "question": "What does the sample service do?",
+      "relevant": [
+        {"file_path": "README.md", "symbol": "Sample Service"},
+        {"symbol": "AuthService"}
+      ]
+    },
+    {
+      "question": "What is used to sign and verify tokens?",
+      "relevant": [
+        {"file_path": "auth.py"}
+      ]
+    }
+  ]
+}

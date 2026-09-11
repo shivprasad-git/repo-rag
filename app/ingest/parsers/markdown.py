@@ -27,7 +27,8 @@ def parse_markdown(path: Path, repo_path: Path, commit: str | None = None) -> li
     headings = _markdown_headings(tree, source)
 
     if not headings and lines:
-        return [_line_chunk(lines, 0, len(lines) - 1, metadata, ChunkType.MARKDOWN_SECTION, "Document")]
+        chunk = _line_chunk(lines, 0, len(lines) - 1, metadata, ChunkType.MARKDOWN_SECTION, "Document")
+        return [chunk] if chunk.content.strip() else []
 
     chunks: list[Chunk] = []
     heading_stack: list[tuple[int, str]] = []

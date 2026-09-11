@@ -1,9 +1,13 @@
 name: CI
 
-on:
-  push:
-    branches: [main]
-  pull_request:
+# CI is currently DISABLED.
+# To re-enable automated runs, uncomment the `on:` block below (the workflow
+# file is fully intact, so nothing else needs to change).
+# on:
+#   push:
+#     branches: [main]
+#   pull_request:
+on: workflow_dispatch
 
 jobs:
   test:

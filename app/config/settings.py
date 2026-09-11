@@ -15,6 +15,9 @@ class Settings:
     base_dir: Path = Path(__file__).resolve().parents[2]
     repositories_dir: Path = base_dir / "data" / "repositories"
     indexes_dir: Path = base_dir / "indexes"
+    eval_dir: Path = base_dir / "eval"
+    eval_golden_dir: Path = base_dir / "eval" / "golden"
+    eval_results_dir: Path = base_dir / "eval" / "results"
     collection_name: str = "repo_rag"
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_dimensions: int = 384
@@ -71,6 +74,7 @@ _SETTINGS_ENV_OVERRIDES: dict[str, tuple[str, Callable[[str], object]]] = {
     "RAG_CHUNK_OVERLAP_TOKENS": ("chunk_overlap_tokens", int),
     "RAG_CONTEXT_WINDOW_PARTS": ("context_window_parts", int),
     "RAG_MAX_PROMPT_CONTEXT_TOKENS": ("max_prompt_context_tokens", int),
+    "RAG_EVAL_RESULTS_DIR": ("eval_results_dir", Path),
 }
 
 

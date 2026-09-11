@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import replace
+from pathlib import Path
 
 from app.cli_format import format_matches, format_matches_json
 from app.config import Settings, cli_defaults, load_settings
+from app.eval import format_eval_report, load_golden_set, run_eval, write_report
 from app.indexing import check_index_health, format_health_report, format_index_info, get_index_info
 from app.llm import build_prompt
 from app.logging_config import setup_logging
@@ -54,6 +56,18 @@ def main() -> None:
     ask_parser.add_argument("--top-k", type=int, default=5)
     _add_filter_args(ask_parser)
 
+    eval_parser = subparsers.add_parser("eval", help="Run retrieval evaluation against a golden set")
+    eval_parser.add_argument(
+        "--golden",
+        default=None,
+        help="Path to a golden set JSON file (default: eval/golden/sample.json)",
+    )
+    eval_parser.add_argument(
+        "--top-k",
+        default=None,
+        help="Comma-separated k values overriding the golden set, e.g. 3,5",
+    )
+
     health_parser = subparsers.add_parser("health", help="Check index/document/vector store consistency")
     health_parser.add_argument("--repo", help="Optional local or GitHub repo to check manifest file hashes against")
 
@@ -95,6 +109,15 @@ def main() -> None:
                 filters=_metadata_filters_from_args(args),
             )
         )
+    elif args.command == "eval":
+        golden_path = Path(args.golden or settings.eval_golden_dir / "sample.json")
+        golden = load_golden_set(golden_path)
+        if args.top_k:
+            golden = replace(golden, top_k=tuple(int(value) for value in args.top_k.split(",")))
+        report = run_eval(golden, settings, index_name=args.index_name)
+        print(format_eval_report(report))
+        report_path = write_report(report, settings)
+        print(f"\nReport written to {report_path}")
     elif args.command == "health":
         report = check_index_health(args.store, settings, args.index_name, repo=args.repo)
         print(format_health_report(report))

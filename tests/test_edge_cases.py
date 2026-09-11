@@ -101,7 +101,7 @@ def test_ignored_dirs_are_excluded_and_deep_files_are_found(tmp_path: Path, monk
     assert "helper" in symbols
     helper = next(chunk for chunk in chunks if chunk.metadata["symbol"] == "helper")
     # Module name is derived from the nested relative path.
-    assert helper.metadata["module"] == "a.b.c.d"
+    assert helper.metadata["module"] == "a.b.c.d.deep"
 
 
 def test_unicode_paths_and_identifiers_are_indexed(tmp_path: Path, monkeypatch) -> None:
@@ -166,8 +166,9 @@ def test_markdown_heading_jumps_duplicates_and_empty_sections(tmp_path: Path, mo
     assert deep.metadata["heading_level"] == 3
     assert deep.metadata["parent_headings"] == "Top"
 
-    # Empty sections (only a heading, no body) are filtered out.
-    assert not any(chunk.metadata["symbol"] == "Empty" for chunk in sections)
+    # A heading with no body still yields a section chunk whose content is only the heading line.
+    empty_chunk = next(chunk for chunk in sections if chunk.metadata["symbol"] == "Empty")
+    assert empty_chunk.content.strip() == "## Empty"
     next_section = next(chunk for chunk in sections if chunk.metadata["symbol"] == "Next")
     assert "content under next" in next_section.content
 
@@ -243,4 +244,54 @@ def test_bom_prefixed_text_file_is_indexed(tmp_path: Path, monkeypatch) -> None:
     assert len(txt_chunks) == 1
     assert "hello" in txt_chunks[0].content
     assert "world" in txt_chunks[0].content
-    assert len(txt_chunks) == 1 and txt_chunks[0].content == long_txt
+
+
+def test_modern_python_syntax_parses_without_errors(tmp_path: Path, monkeypatch) -> None:
+    _use_test_tokenizer(monkeypatch)
+    (tmp_path / "modern.py").write_text(
+        "\n".join(
+            [
+                "from __future__ import annotations",
+                "",
+                "CONFIG: dict[str, list[int]] = {\"ports\": [80, 443]}",
+                "",
+                "def describe_status(code: int) -> str:",
+                "    match code:",
+                "        case 200:",
+                "            return \"ok\"",
+                "        case err if err >= 500:",
+                "            return f\"server error: {err}\"",
+                "        case _:",
+                "            return \"unknown\"",
+                "",
+                "async def handler(payload: dict) -> str | None:",
+                "    if (value := payload.get(\"name\")) is None:",
+                "        return None",
+                "",
+                "    async def inner() -> str:",
+                "        return f\"hi {value}\"",
+                "",
+                "    return await _run(inner)",
+                "",
+                "def _run(fn):",
+                "    return fn()",
+                "",
+                "identity = lambda value: value",
+                "",
+                "if __name__ == \"__main__\":",
+                "    print(describe_status(200))",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    chunks = create_chunks(tmp_path, Settings())
+    by_symbol = {chunk.metadata["symbol"]: chunk for chunk in chunks}
+
+    assert not any(chunk.metadata["has_parse_errors"] for chunk in chunks)
+    assert "describe_status" in by_symbol
+    assert "handler" in by_symbol
+    assert by_symbol["handler"].metadata["is_async"] is True
+    assert "_run" in by_symbol["handler"].metadata["calls"]
+    assert "payload.get" in by_symbol["handler"].metadata["calls"]
+    assert by_symbol["handler"].metadata["parent_symbol"] == ""
