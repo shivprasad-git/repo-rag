@@ -6,13 +6,18 @@ import hashlib
 from pathlib import Path
 
 from tree_sitter import Language, Node, Parser, Tree
+import tree_sitter_javascript
 import tree_sitter_markdown
 import tree_sitter_python
+import tree_sitter_typescript
 
 from app.models import Chunk, ChunkType
 
 PYTHON_LANGUAGE = Language(tree_sitter_python.language())
 MARKDOWN_LANGUAGE = Language(tree_sitter_markdown.language())
+JAVASCRIPT_LANGUAGE = Language(tree_sitter_javascript.language())
+TYPESCRIPT_LANGUAGE = Language(tree_sitter_typescript.language_typescript())
+TSX_LANGUAGE = Language(tree_sitter_typescript.language_tsx())
 
 
 def _parse(source: bytes, language: Language) -> Tree:
@@ -102,6 +107,36 @@ def _collect_error_lines(node: Node, error_lines: set[int]) -> None:
         error_lines.add(node.start_point[0] + 1)
     for child in node.children:
         _collect_error_lines(child, error_lines)
+
+
+def _light_parse_error_metadata(error_metadata: dict) -> dict:
+    return {
+        "has_parse_errors": error_metadata["has_parse_errors"],
+        "parse_error_lines": "",
+    }
+
+
+def _parse_error_chunks(lines: list[str], root: Node, metadata: dict) -> list[Chunk]:
+    error_nodes: list[Node] = []
+    _collect_error_nodes(root, error_nodes)
+    return [
+        _line_chunk(
+            lines,
+            error_node.start_point[0],
+            error_node.end_point[0],
+            metadata,
+            ChunkType.PARSE_ERROR,
+            f"parse_error:{error_node.start_point[0] + 1}",
+        )
+        for error_node in error_nodes
+    ]
+
+
+def _collect_error_nodes(node: Node, error_nodes: list[Node]) -> None:
+    if node.type == "ERROR" or node.is_missing:
+        error_nodes.append(node)
+    for child in node.children:
+        _collect_error_nodes(child, error_nodes)
 
 
 def _module_name(relative_path: Path) -> str:

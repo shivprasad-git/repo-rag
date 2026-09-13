@@ -13,9 +13,11 @@ from app.ingest.parsers.common import (
     _decode,
     _first_child_of_type,
     _join_metadata_values,
+    _light_parse_error_metadata,
     _line_chunk,
     _node_text,
     _parse,
+    _parse_error_chunks,
     _parse_error_metadata,
     _qualify_symbol,
 )
@@ -329,38 +331,8 @@ def _strip_string_quotes(text: str) -> str:
     return stripped
 
 
-def _light_parse_error_metadata(error_metadata: dict) -> dict:
-    return {
-        "has_parse_errors": error_metadata["has_parse_errors"],
-        "parse_error_lines": "",
-    }
-
-
 def _file_metadata_id(metadata: dict) -> str:
     return _chunk_id(metadata, ChunkType.FILE_METADATA, metadata["file_path"], 1, 1)
-
-
-def _parse_error_chunks(lines: list[str], root: Node, metadata: dict) -> list[Chunk]:
-    error_nodes: list[Node] = []
-    _collect_error_nodes(root, error_nodes)
-    return [
-        _line_chunk(
-            lines,
-            error_node.start_point[0],
-            error_node.end_point[0],
-            metadata,
-            ChunkType.PARSE_ERROR,
-            f"parse_error:{error_node.start_point[0] + 1}",
-        )
-        for error_node in error_nodes
-    ]
-
-
-def _collect_error_nodes(node: Node, error_nodes: list[Node]) -> None:
-    if node.type == "ERROR" or node.is_missing:
-        error_nodes.append(node)
-    for child in node.children:
-        _collect_error_nodes(child, error_nodes)
 
 
 def _is_test(metadata: dict, symbol: str) -> bool:

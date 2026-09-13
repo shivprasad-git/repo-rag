@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from app.config import Settings
-from app.eval import golden_set_from_dict, load_report, report_to_dict, run_eval, write_report
+from app.eval import golden_set_from_dict, load_golden_set, load_report, report_to_dict, run_eval, write_report
 from app.embeddings import EmbeddingProvider
 
 
@@ -147,3 +147,27 @@ def test_run_eval_reuses_existing_index(tmp_path: Path, monkeypatch) -> None:
     assert first.aggregate == second.aggregate
     # The index still exists and did not need rebuilding.
     assert len(list((settings.indexes_dir / "chunks").glob("*.json"))) == 1
+
+
+def test_run_eval_with_typescript_golden_set(tmp_path: Path, monkeypatch) -> None:
+    _use_test_tokenizer(monkeypatch)
+    settings = _eval_settings(tmp_path)
+    golden = load_golden_set("eval/golden/sample_ts.json")
+
+    report = run_eval(golden, settings)
+
+    assert report.name == "sample_ts"
+    assert report.index_name == "sample-ts-repo"
+    assert len(report.questions) == 6
+    assert all(question.relevant_count >= 1 for question in report.questions)
+
+    login = next(question for question in report.questions if "login" in question.question)
+    assert login.metrics.recall_at_k[5] == 1.0
+    assert login.metrics.mrr > 0.0
+
+    user_question = next(question for question in report.questions if "shape of a User" in question.question)
+    assert user_question.relevant_count == 1
+    assert user_question.metrics.recall_at_k[5] == 1.0
+    assert user_question.metrics.mrr > 0.0
+
+    assert all(name in report.aggregate for name in ("mrr", "recall@3", "recall@5", "ndcg@5"))

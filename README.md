@@ -11,9 +11,9 @@ It currently focuses on the backend RAG pipeline: Tree-sitter parsing, chunking,
 ## Features
 
 - Loads local repositories or clones GitHub repositories.
-- Indexes `.py`, `.md`, and `.txt` files.
-- Parses Python and Markdown with Tree-sitter.
-- Creates structured chunks for classes, methods, functions, Markdown sections, text files, imports, file metadata, and parse errors.
+- Indexes `.py`, `.md`, `.txt`, `.js`, `.jsx`, `.ts`, and `.tsx` files.
+- Parses Python, JavaScript/TypeScript, and Markdown with Tree-sitter.
+- Creates structured chunks for classes, methods, functions, Markdown sections, text files, TypeScript interfaces/type aliases/enums, imports, file metadata, and parse errors.
 - Splits oversized searchable chunks with tokenizer-aware overlap.
 - Stores full chunk content in a JSON document store.
 - Stores embeddings in Chroma or a simple JSON vector store.
@@ -180,6 +180,38 @@ python3 -m coverage report -m
 
 Coverage is reported from the local test run.
 
+## Evaluation
+
+Run retrieval evaluation against a golden set:
+
+```bash
+python3 -m app.cli eval
+```
+
+Scores retrieval with `recall@k`, `precision@k`, `MRR`, and `nDCG@k` per question and in aggregate. The default golden set is `eval/golden/sample.json` (a Python repo); `eval/golden/sample_ts.json` exercises JavaScript/TypeScript parsing. Point at another set with `--golden path.json` and override k values with `--top-k 3,5`.
+
+A golden set is JSON:
+
+```json
+{
+  "name": "sample",
+  "repo": "work/sample_repo",
+  "store": "simple",
+  "index_name": "sample-repo",
+  "top_k": [3, 5],
+  "questions": [
+    {
+      "question": "How does login work?",
+      "relevant": [
+        {"file_path": "auth.py", "symbol": "AuthService.login", "chunk_type": "method"}
+      ]
+    }
+  ]
+}
+```
+
+Each `relevant` entry is a chunk selector (at least one of `file_path`, `symbol`, or `chunk_type`); matching chunks are the ground truth for that question. Reports are written to `eval/results/` as timestamped JSON so retrieval changes can be compared over time.
+
 ## API
 
 The optional FastAPI app exposes `/index` and `/query`.
@@ -190,7 +222,7 @@ uvicorn app.api:app --reload
 
 ## Scope
 
-This is still a backend MVP. It does not yet include direct LLM answer generation, a full UI, authentication, background workers, broad language support, or multi-user project management.
+This is still a backend MVP. It does not yet include direct LLM answer generation, a full UI, authentication, background workers, multi-user project management, or additional languages beyond Python, JavaScript/TypeScript, and Markdown.
 
 ## AI Credits
 

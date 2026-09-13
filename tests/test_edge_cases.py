@@ -90,7 +90,7 @@ def test_ignored_dirs_are_excluded_and_deep_files_are_found(tmp_path: Path, monk
     deep.write_text("def helper():\n    return 1\n", encoding="utf-8")
     (tmp_path / "README.MD").write_text("# Hi\n", encoding="utf-8")
     (tmp_path / "UPPER.TXT").write_text("hi", encoding="utf-8")
-    (tmp_path / "skip.js").write_text("console.log(1)", encoding="utf-8")
+    (tmp_path / "skip.css").write_text("body { color: red }", encoding="utf-8")
     (tmp_path / "Makefile").write_text("all:", encoding="utf-8")
 
     discovered = [str(path.relative_to(tmp_path)) for path in discover_files(tmp_path, Settings())]

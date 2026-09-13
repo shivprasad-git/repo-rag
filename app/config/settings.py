@@ -23,19 +23,25 @@ class Settings:
     embedding_dimensions: int = 384
     reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     reranker_enabled: bool = True
-    supported_extensions: tuple[str, ...] = (".py", ".md", ".txt")
+    supported_extensions: tuple[str, ...] = (".py", ".js", ".jsx", ".ts", ".tsx", ".md", ".txt")
     searchable_chunk_types: tuple[ChunkType, ...] = (
         ChunkType.CLASS,
         ChunkType.FUNCTION,
         ChunkType.METHOD,
         ChunkType.MARKDOWN_SECTION,
         ChunkType.TEXT_FILE,
+        ChunkType.TS_INTERFACE,
+        ChunkType.TYPE_ALIAS,
+        ChunkType.ENUM,
     )
     splittable_chunk_types: tuple[ChunkType, ...] = (
         ChunkType.FUNCTION,
         ChunkType.METHOD,
         ChunkType.MARKDOWN_SECTION,
         ChunkType.TEXT_FILE,
+        ChunkType.TS_INTERFACE,
+        ChunkType.TYPE_ALIAS,
+        ChunkType.ENUM,
     )
     max_chunk_tokens: int = 700
     chunk_overlap_tokens: int = 100
